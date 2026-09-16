@@ -126,8 +126,7 @@ def search_card(keyword: str) -> list[Listing]:
         driver = webdriver.Chrome(options=chrome_options)
 
         try:
-                            chrome_options.binary_location = "/snap/bin/chromium"    
-            
+            url = f"https://www.paypayfleamarket.yahoo.co.jp/search?keyword={urlencode({'q': keyword})}&sort=score"
             driver.get(url)
 
             wait = WebDriverWait(driver, 10)
