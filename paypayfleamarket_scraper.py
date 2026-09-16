@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
-PayPay 繝輔Μ繝・MEGA 繧ｷ繝ｪ繝ｼ繧ｺ 繧ｫ繝ｼ繝我ｾ｡譬ｼ繝｢繝九ち繝ｼ
+PayPay フリマ MEGA シリーズ カード価格モニター
 ============================================
 
-蟇ｾ雎｡繧ｫ繝ｼ繝峨＃縺ｨ縺ｫ PayPay 繝輔Μ繝樊､懃ｴ｢繧貞ｮ溯｡後＠縲√瑚ｲｩ螢ｲ荳ｭ縲阪°縺､縲御ｾ｡譬ｼ縺ｮ螳峨＞鬆・阪〒
-荳贋ｽ・3 莉ｶ・医き繝ｼ繝牙錐繝ｻ萓｡譬ｼ繝ｻURL・峨ｒ蜿門ｾ励＠縺ｦ Discord 縺ｫ Embed 蠖｢蠑上〒騾夂衍縺吶ｋ縲・
-GitHub Actions 縺九ｉ 6 譎る俣縺斐→縺ｫ螳溯｡後＆繧後ｋ諠ｳ螳壹・
-蠢・ｦ√↑迺ｰ蠅・､画焚:
-    DISCORD_WEBHOOK_URL   Discord Incoming Webhook 縺ｮ URL
+対象カードごとに PayPay フリマ検索を実行し、「販売中」かつ「価格の安い順」で
+上位 3 件（カード名・価格・URL）を取得して Discord に Embed 形式で通知する。
 
-蠢・ｦ√↑繝ｩ繧､繝悶Λ繝ｪ:
-    selenium              繝悶Λ繧ｦ繧ｶ閾ｪ蜍募喧
-    requests              HTTP 繝ｪ繧ｯ繧ｨ繧ｹ繝磯∽ｿ｡
+GitHub Actions から 6 時間ごとに実行される想定。
+
+必要な環境変数:
+    DISCORD_WEBHOOK_URL   Discord Incoming Webhook の URL
+
+必要なライブラリ:
+    selenium              ブラウザ自動化
+    requests              HTTP リクエスト送信
 """
 
 from __future__ import annotations
@@ -32,29 +34,30 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 
 # ---------------------------------------------------------------------------
-# 險ｭ螳・# ---------------------------------------------------------------------------
+# 設定
+# ---------------------------------------------------------------------------
 
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
 
 CARD_KEYWORDS: list[str] = [
-    "繝｡繧ｬ繝ｫ繧ｫ繝ｪ繧ｪex MUR 繝｡繧ｬ繝悶Ξ繧､繝・,
-    "繝ｪ繝ｼ繝ｪ繧ｨ縺ｮ豎ｺ蠢・SAR 繝｡繧ｬ繝悶Ξ繧､繝・,
-    "繝｡繧ｬ繧ｵ繝ｼ繝翫う繝・x MUR 繝｡繧ｬ繧ｷ繝ｳ繝輔か繝九い",
-    "繝｡繧ｬ繧ｵ繝ｼ繝翫う繝・x SAR 繝｡繧ｬ繧ｷ繝ｳ繝輔か繝九い",
-    "繝｡繧ｬ繝ｪ繧ｶ繝ｼ繝峨ΦXex MUR 繧､繝ｳ繝輔ぉ繝ｫ繝珊",
-    "繝｡繧ｬ繝ｪ繧ｶ繝ｼ繝峨ΦXex SAR 繧､繝ｳ繝輔ぉ繝ｫ繝珊",
-    "繝｡繧ｬ繧ｫ繧､繝ｪ繝･繝ｼex MUR MEGA繝峨Μ繝ｼ繝ex",
-    "繝斐き繝√Η繧ｦex SAR MEGA繝峨Μ繝ｼ繝ex",
-    "繝ｭ繧ｱ繝・ヨ蝗｣縺ｮ繝溘Η繧ｦ繝・・ex SAR MEGA繝峨Μ繝ｼ繝ex",
-    "繝｡繧ｬ繧ｲ繝ｳ繧ｬ繝ｼex SAR MEGA繝峨Μ繝ｼ繝ex",
-    "繝｡繧ｬ繧ｫ繧､繝ｪ繝･繝ｼex SAR MEGA繝峨Μ繝ｼ繝ex",
-    "繝｡繧ｬ繧ｸ繧ｬ繝ｫ繝㌃x MUR 繝繝九く繧ｹ繧ｼ繝ｭ",
-    "繝九Ε繝ｼ繧ｹex SAR 繝繝九く繧ｹ繧ｼ繝ｭ",
-    "繝｡繧､縺ｮ縺ｯ縺偵∪縺・SAR 繝繝九く繧ｹ繧ｼ繝ｭ",
-    "繝｡繧ｬ繧ｲ繝・さ繧ｦ繧ｬex MUR 繝九Φ繧ｸ繝｣繧ｹ繝斐リ繝ｼ",
-    "繝｡繧ｬ繧ｲ繝・さ繧ｦ繧ｬex SAR 繝九Φ繧ｸ繝｣繧ｹ繝斐リ繝ｼ",
-    "繝｡繧ｬ繝繝ｼ繧ｯ繝ｩ繧､ex MUR 繧｢繝薙せ繧｢繧､",
-    "繝｡繧ｬ繝繝ｼ繧ｯ繝ｩ繧､ex SAR 繧｢繝薙せ繧｢繧､",
+    "メガルカリオex MUR メガブレイブ",
+    "リーリエの決心 SAR メガブレイブ",
+    "メガサーナイトex MUR メガシンフォニア",
+    "メガサーナイトex SAR メガシンフォニア",
+    "メガリザードンXex MUR インフェルノX",
+    "メガリザードンXex SAR インフェルノX",
+    "メガカイリューex MUR MEGAドリームex",
+    "ピカチュウex SAR MEGAドリームex",
+    "ロケット団のミュウツーex SAR MEGAドリームex",
+    "メガゲンガーex SAR MEGAドリームex",
+    "メガカイリューex SAR MEGAドリームex",
+    "メガジガルデex MUR ムニキスゼロ",
+    "ニャースex SAR ムニキスゼロ",
+    "メイのはげまし SAR ムニキスゼロ",
+    "メガゲッコウガex MUR ニンジャスピナー",
+    "メガゲッコウガex SAR ニンジャスピナー",
+    "メガダークライex MUR アビスアイ",
+    "メガダークライex SAR アビスアイ",
 ]
 
 TOP_N = 3
@@ -62,23 +65,23 @@ TOP_N = 3
 JST = timezone(timedelta(hours=9))
 
 EXCLUDE_KEYWORDS: set[str] = {
-    "繧ｻ繝・ヨ",
-    "2譫・,
-    "3譫・,
-    "4譫・,
-    "5譫・,
-    "10譫・,
-    "20譫・,
-    "5繝代ャ繧ｯ",
-    "10繝代ャ繧ｯ",
+    "セット",
+    "2枚",
+    "3枚",
+    "4枚",
+    "5枚",
+    "10枚",
+    "20枚",
+    "5パック",
+    "10パック",
     "Box",
-    "繝懊ャ繧ｯ繧ｹ",
-    "縺ｾ縺ｨ繧∝｣ｲ繧・,
-    "遖剰｢・,
-    "讒狗ｯ画ｸ医∩繝・ャ繧ｭ",
-    "繝・ャ繧ｭ",
-    "譌ｧ陬・,
-    "縺翫∪縺・,
+    "ボックス",
+    "まとめ売り",
+    "福袋",
+    "構築済みデッキ",
+    "デッキ",
+    "旧裏",
+    "おまけ",
     "2P",
     "3P",
     "4P",
@@ -94,7 +97,7 @@ class Listing:
 
 
 # ---------------------------------------------------------------------------
-# 蝠・刀繝輔ぅ繝ｫ繧ｿ繝ｪ繝ｳ繧ｰ
+# 商品フィルタリング
 # ---------------------------------------------------------------------------
 
 
@@ -104,7 +107,7 @@ def is_single_card(title: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# PayPay 繝輔Μ繝樊､懃ｴ｢
+# PayPay フリマ検索
 # ---------------------------------------------------------------------------
 
 
@@ -112,7 +115,7 @@ def search_card(keyword: str) -> list[Listing]:
     listings: list[Listing] = []
 
     try:
-        print(f"讀懃ｴ｢荳ｭ: {keyword}", file=sys.stderr)
+        print(f"検索中: {keyword}", file=sys.stderr)
 
         chrome_options = Options()
         chrome_options.add_argument("--headless")
@@ -144,18 +147,18 @@ def search_card(keyword: str) -> list[Listing]:
                     title = title_elem.text
 
                     if not is_single_card(title):
-                        print(f"髯､螟・ {title}", file=sys.stderr)
+                        print(f"除外: {title}", file=sys.stderr)
                         continue
 
                     price_elem = item.find_element(
                         By.CSS_SELECTOR, ".ProductCard__priceWrapper"
                     )
-                    price_text = price_elem.text.replace("ﾂ･", "").replace(",", "")
+                    price_text = price_elem.text.replace("¥", "").replace(",", "")
 
                     try:
                         price = int(price_text)
                     except ValueError:
-                        print(f"辟｡蜉ｹ縺ｪ萓｡譬ｼ: {title} ({price_text})", file=sys.stderr)
+                        print(f"無効な価格: {title} ({price_text})", file=sys.stderr)
                         continue
 
                     link_elem = item.find_element(By.CSS_SELECTOR, "a")
@@ -166,25 +169,25 @@ def search_card(keyword: str) -> list[Listing]:
 
                     listings.append(Listing(card=keyword, price=price, url=url))
                     print(
-                        f"蜿門ｾ・ {title} - ﾂ･{price:,}",
+                        f"取得: {title} - ¥{price:,}",
                         file=sys.stderr,
                     )
 
                 except Exception as e:
                     print(
-                        f"繧｢繧､繝・Β蜃ｦ逅・お繝ｩ繝ｼ ({keyword}): {type(e).__name__}: {e}",
+                        f"アイテム処理エラー ({keyword}): {type(e).__name__}: {e}",
                         file=sys.stderr,
                     )
                     continue
 
-            print(f"螳御ｺ・ {keyword} ({len(listings)} 莉ｶ)", file=sys.stderr)
+            print(f"完了: {keyword} ({len(listings)} 件)", file=sys.stderr)
 
         finally:
             driver.quit()
 
     except Exception as e:
         print(
-            f"讀懃ｴ｢繧ｨ繝ｩ繝ｼ ({keyword}): {type(e).__name__}: {e}",
+            f"検索エラー ({keyword}): {type(e).__name__}: {e}",
             file=sys.stderr,
         )
 
@@ -206,7 +209,7 @@ def fetch_all() -> tuple[dict[str, list[Listing]], dict[str, str]]:
 
 
 # ---------------------------------------------------------------------------
-# Discord 騾夂衍
+# Discord 通知
 # ---------------------------------------------------------------------------
 
 
@@ -215,12 +218,12 @@ def _now_jst() -> str:
 
 
 def _fmt_price(price: int) -> str:
-    return f"ﾂ･{price:,}"
+    return f"¥{price:,}"
 
 
 def _send(payload: dict) -> None:
     if not DISCORD_WEBHOOK_URL:
-        print("DISCORD_WEBHOOK_URL 譛ｪ險ｭ螳壹・縺溘ａ騾∽ｿ｡繧偵せ繧ｭ繝・・", file=sys.stderr)
+        print("DISCORD_WEBHOOK_URL 未設定のため送信をスキップ", file=sys.stderr)
         return
     resp = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=15)
     resp.raise_for_status()
@@ -233,17 +236,17 @@ def post_report(results: dict[str, list[Listing]], errors: dict[str, str]) -> No
         if listings:
             value = "\n".join(f"[{_fmt_price(l.price)}]({l.url})" for l in listings)
         elif keyword in errors:
-            value = f"笞・・蜿門ｾ怜､ｱ謨・ {errors[keyword][:200]}"
+            value = f"⚠️ 取得失敗: {errors[keyword][:200]}"
         else:
-            value = "雋ｩ螢ｲ荳ｭ縺ｮ蜃ｺ蜩√↑縺・
+            value = "販売中の出品なし"
         fields.append({"name": keyword, "value": value, "inline": False})
 
     embed = {
-        "title": "PayPay 繝輔Μ繝・MEGA 繧ｷ繝ｪ繝ｼ繧ｺ 譛螳牙､繝ｬ繝昴・繝・,
-        "description": f"雋ｩ螢ｲ荳ｭ繝ｻ譛螳・{TOP_N} 莉ｶ / {_now_jst()}",
+        "title": "PayPay フリマ MEGA シリーズ 最安値レポート",
+        "description": f"販売中・最安 {TOP_N} 件 / {_now_jst()}",
         "color": 0x003DA5,
         "fields": fields[:25],
-        "footer": {"text": "6 譎る俣縺斐→閾ｪ蜍募ｮ溯｡・},
+        "footer": {"text": "6 時間ごと自動実行"},
     }
     _send({"embeds": [embed]})
 
@@ -259,29 +262,30 @@ def post_failure(title: str, detail: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 繧ｨ繝ｳ繝医Μ繝昴う繝ｳ繝・# ---------------------------------------------------------------------------
+# エントリポイント
+# ---------------------------------------------------------------------------
 
 
 def main() -> int:
     if not DISCORD_WEBHOOK_URL:
-        print("迺ｰ蠅・､画焚 DISCORD_WEBHOOK_URL 縺悟ｿ・ｦ√〒縺・, file=sys.stderr)
+        print("環境変数 DISCORD_WEBHOOK_URL が必要です", file=sys.stderr)
         return 1
 
     try:
         results, errors = fetch_all()
     except Exception:
-        post_failure("繧ｹ繧ｯ繝ｬ繧､繝斐Φ繧ｰ螟ｱ謨・, traceback.format_exc())
+        post_failure("スクレイピング失敗", traceback.format_exc())
         return 1
 
     if errors and len(errors) == len(CARD_KEYWORDS):
         detail = "\n".join(f"- {k}: {v}" for k, v in errors.items())
-        post_failure("繧ｹ繧ｯ繝ｬ繧､繝斐Φ繧ｰ螟ｱ謨・, detail)
+        post_failure("スクレイピング失敗", detail)
         return 1
 
     post_report(results, errors)
 
     if errors:
-        print(f"{len(errors)} 莉ｶ縺ｮ繧ｫ繝ｼ繝峨〒蜿門ｾ怜､ｱ謨・, file=sys.stderr)
+        print(f"{len(errors)} 件のカードで取得失敗", file=sys.stderr)
     return 0
 
 
