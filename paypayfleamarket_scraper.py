@@ -121,8 +121,8 @@ def search_card(keyword: str) -> list[Listing]:
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.binary_location = "/snap/bin/chromium"
 
-                        chrome_options.binary_location = "/snap/bin/chromium"
         driver = webdriver.Chrome(options=chrome_options)
 
         try:
@@ -292,3 +292,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
