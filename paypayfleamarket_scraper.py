@@ -19,6 +19,7 @@ GitHub Actions から 6 時間ごとに実行される想定。
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 import traceback
@@ -225,7 +226,12 @@ def _send(payload: dict) -> None:
     if not DISCORD_WEBHOOK_URL:
         print("DISCORD_WEBHOOK_URL 未設定のため送信をスキップ", file=sys.stderr)
         return
-    resp = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=15)
+    resp = requests.post(
+                    DISCORD_WEBHOOK_URL,
+                    data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
+                    headers={"Content-Type": "application/json; charset=utf-8"},
+                    timeout=15
+    )
     resp.raise_for_status()
 
 
