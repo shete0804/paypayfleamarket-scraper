@@ -14,10 +14,10 @@ on:
                                   - uses: actions/setup-python@v4
                                           with:
                                                     python-version: '3.12'
-                                                          - name: Install Chrome
+                                                          - name: Install chrome
                                                                   run: |
                                                                             sudo apt-get update
-                                                                                      sudo apt-get install -y chromium-browser chromium-chromedriver libgbm1 libxss1 libappindicator1 libindicator7
+                                                                                      sudo apt-get install -y chromium
                                                                                             - name: Install dependencies
                                                                                                     run: pip install -r paypayfleamarket_requirements.txt
                                                                                                           - name: Run scraper
