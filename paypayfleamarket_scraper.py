@@ -144,6 +144,13 @@ def search_card(keyword: str) -> list[Listing]:
     try:
         print(f"検索中: {keyword}", file=sys.stderr)
 
+        import socket
+        try:
+            ip_addr = socket.gethostbyname("www.paypayfleamarket.yahoo.co.jp")
+            print(f"DEBUG: Resolved www.paypayfleamarket.yahoo.co.jp to {ip_addr}", file=sys.stderr)
+        except Exception as e:
+            print(f"DEBUG: DNS resolution failed: {e}", file=sys.stderr)
+
         chrome_options = Options()
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
@@ -152,6 +159,8 @@ def search_card(keyword: str) -> list[Listing]:
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--disable-sync")
         chrome_options.add_argument("--enable-features=NetworkService,NetworkServiceInProcess")
+        chrome_options.add_argument("--dns-prefetch-disable")
+        chrome_options.add_argument("--no-first-run")
         chrome_options.binary_location = "/usr/bin/google-chrome"
 
         service = Service(ChromeDriverManager().install())
@@ -161,7 +170,7 @@ def search_card(keyword: str) -> list[Listing]:
             url = f"https://www.paypayfleamarket.yahoo.co.jp/search?keyword={urlencode({'q': keyword})}&sort=score"
             driver.get(url)
 
-            wait = WebDriverWait(driver, 10)
+            wait = WebDriverWait(driver, 20)
             try:
                 wait.until(
                     EC.presence_of_all_elements_located(
