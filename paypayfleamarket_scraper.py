@@ -33,6 +33,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
 
 # ---------------------------------------------------------------------------
 # 設定
@@ -124,7 +126,8 @@ def search_card(keyword: str) -> list[Listing]:
         chrome_options.add_argument("--disable-gpu")
         chrome_options.binary_location = "/usr/bin/google-chrome"
 
-        driver = webdriver.Chrome(options=chrome_options)
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
 
         try:
             url = f"https://www.paypayfleamarket.yahoo.co.jp/search?keyword={urlencode({'q': keyword})}&sort=score"
