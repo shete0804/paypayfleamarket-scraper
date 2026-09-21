@@ -310,26 +310,63 @@ def search_card(keyword: str) -> list[Listing]:
                         continue
             else:
                 # セレクタが見つからない場合、JavaScriptで直接取得を試みる
-                print(f"DEBUG: No items found with CSS selectors, trying JavaScript extraction", file=sys.stderr)
+                print(f"DEBUG: No items found with CSS selectors, trying aggressive JavaScript extraction", file=sys.stderr)
                 try:
-                    # ページ内のスクリプト変数からデータを抽出
+                    # より攻撃的な DOM 走査: すべての div を検査
                     js_code = """
-                    return Array.from(document.querySelectorAll('[class*="ProductCard"], [class*="product"]'))
-                        .map(el => ({
-                            title: el.querySelector('[class*="title"]')?.textContent || '',
-                            price: el.querySelector('[class*="price"]')?.textContent || '',
-                            url: el.querySelector('a')?.href || ''
-                        }))
-                        .filter(p => p.title && p.price && p.url);
+                    const items = [];
+
+                    // 戦略1: すべての article タグを検査
+                    document.querySelectorAll('article').forEach(article => {
+                        const titleEl = article.querySelector('h1, h2, h3, .ProductCard__title, [class*="title"]');
+                        const priceEl = Array.from(article.querySelectorAll('*')).find(el => {
+                            const text = el.textContent || '';
+                            return /¥|￥/.test(text) && /\d/.test(text);
+                        });
+                        const linkEl = article.querySelector('a[href]');
+
+                        if (titleEl && priceEl && linkEl) {
+                            items.push({
+                                title: titleEl.textContent.trim(),
+                                price: priceEl.textContent.trim(),
+                                url: linkEl.href
+                            });
+                        }
+                    });
+
+                    // 戦略2: 任意のコンテナ（class*="product"やclass*="card"）を検査
+                    if (items.length === 0) {
+                        document.querySelectorAll('[class*="product"], [class*="card"]').forEach(container => {
+                            const titleEl = container.querySelector('h1, h2, h3, [class*="title"]');
+                            const priceEl = Array.from(container.querySelectorAll('*')).find(el => {
+                                const text = el.textContent || '';
+                                return /¥|￥/.test(text) && /\d/.test(text) && text.length < 50;
+                            });
+                            const linkEl = container.querySelector('a[href]');
+
+                            if (titleEl && priceEl && linkEl && titleEl.textContent.trim().length > 3) {
+                                const existing = items.find(i => i.title === titleEl.textContent.trim());
+                                if (!existing) {
+                                    items.push({
+                                        title: titleEl.textContent.trim(),
+                                        price: priceEl.textContent.trim(),
+                                        url: linkEl.href
+                                    });
+                                }
+                            }
+                        });
+                    }
+
+                    return items.slice(0, 10);
                     """
                     result = driver.execute_script(js_code)
-                    print(f"DEBUG: JavaScript extraction returned {len(result)} items", file=sys.stderr)
+                    print(f"DEBUG: Aggressive JavaScript extraction returned {len(result)} items", file=sys.stderr)
                     for item_data in result[:TOP_N]:
                         try:
                             title = item_data['title'].strip()
                             if not is_single_card(title):
                                 continue
-                            price_text = item_data['price'].replace("¥", "").replace(",", "").split()[0]
+                            price_text = item_data['price'].replace("¥", "").replace("￥", "").replace(",", "").split()[0]
                             price = int(price_text)
                             url = item_data['url']
                             if not url.startswith("http"):
