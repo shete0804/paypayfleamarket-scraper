@@ -168,20 +168,48 @@ def search_card(keyword: str) -> list[Listing]:
 
         try:
             url = f"https://www.paypayfleamarket.yahoo.co.jp/search?keyword={urlencode({'q': keyword})}&sort=score"
+            print(f"DEBUG: Accessing URL: {url}", file=sys.stderr)
             driver.get(url)
 
             wait = WebDriverWait(driver, 20)
+
+            # JavaScriptが実行されるまで待機
             try:
                 wait.until(
                     EC.presence_of_all_elements_located(
-                        (By.CSS_SELECTOR, ".ProductCard__title")
+                        (By.CSS_SELECTOR, "[class*='ProductCard']")
                     )
                 )
-                print(f"DEBUG: .ProductCard__title wait successful", file=sys.stderr)
+                print(f"DEBUG: ProductCard elements detected", file=sys.stderr)
             except Exception as e:
-                print(f"DEBUG: .ProductCard__title wait timed out: {e}", file=sys.stderr)
-                body_content = driver.find_element(By.TAG_NAME, "body").get_attribute("innerHTML")[:2000]
-                print(f"DEBUG: Page body sample: {body_content}", file=sys.stderr)
+                print(f"DEBUG: ProductCard wait timed out: {e}", file=sys.stderr)
+
+            # ページ全体のHTMLをダンプして分析
+            try:
+                body_html = driver.find_element(By.TAG_NAME, "body").get_attribute("innerHTML")
+                print(f"DEBUG: Page HTML length: {len(body_html)} characters", file=sys.stderr)
+
+                # 複数のセレクタを試して確認
+                selectors_to_check = [
+                    ".ProductCard",
+                    "[class*='ProductCard']",
+                    ".c-productCard",
+                    "[data-testid*='product']",
+                    "article[class*='Product']",
+                    ".product",
+                    "[class*='product-card']"
+                ]
+
+                for selector in selectors_to_check:
+                    try:
+                        found = driver.find_elements(By.CSS_SELECTOR, selector)
+                        if found:
+                            print(f"DEBUG: Selector '{selector}' found {len(found)} items", file=sys.stderr)
+                    except:
+                        pass
+
+            except Exception as e:
+                print(f"DEBUG: Error dumping HTML: {e}", file=sys.stderr)
 
             items = driver.find_elements(By.CSS_SELECTOR, ".ProductCard")
             print(f"DEBUG: Found {len(items)} items with .ProductCard selector", file=sys.stderr)
@@ -194,6 +222,14 @@ def search_card(keyword: str) -> list[Listing]:
             if not items:
                 items = driver.find_elements(By.CSS_SELECTOR, ".c-productCard")
                 print(f"DEBUG: Found {len(items)} items with .c-productCard selector", file=sys.stderr)
+
+            if not items:
+                items = driver.find_elements(By.CSS_SELECTOR, "[data-testid*='product']")
+                print(f"DEBUG: Found {len(items)} items with [data-testid*='product'] selector", file=sys.stderr)
+
+            if not items:
+                items = driver.find_elements(By.CSS_SELECTOR, "article[class*='Product']")
+                print(f"DEBUG: Found {len(items)} items with article[class*='Product'] selector", file=sys.stderr)
 
             for item in items:
                 if len(listings) >= TOP_N:
