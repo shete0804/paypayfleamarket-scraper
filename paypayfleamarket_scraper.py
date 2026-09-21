@@ -230,15 +230,21 @@ def _send(payload: dict) -> None:
         print("DISCORD_WEBHOOK_URL 未設定のため送信をスキップ", file=sys.stderr)
         return
     print(f"DEBUG: Sending payload to Discord webhook...", file=sys.stderr)
-    resp = requests.post(
-                    DISCORD_WEBHOOK_URL,
-                    data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
-                    headers={"Content-Type": "application/json; charset=utf-8"},
-                    timeout=15
-    )
-    print(f"DEBUG: Discord webhook response: {resp.status_code}", file=sys.stderr)
-    resp.raise_for_status()
-    print(f"DEBUG: Discord webhook sent successfully", file=sys.stderr)
+    print(f"DEBUG: Webhook URL: {DISCORD_WEBHOOK_URL[:80]}...", file=sys.stderr)
+    try:
+        resp = requests.post(
+                        DISCORD_WEBHOOK_URL,
+                        data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
+                        headers={"Content-Type": "application/json; charset=utf-8"},
+                        timeout=15
+        )
+        print(f"DEBUG: Discord webhook response: {resp.status_code}", file=sys.stderr)
+        print(f"DEBUG: Response text: {resp.text[:200]}", file=sys.stderr)
+        resp.raise_for_status()
+        print(f"DEBUG: Discord webhook sent successfully", file=sys.stderr)
+    except Exception as e:
+        print(f"DEBUG: Discord webhook error: {type(e).__name__}: {str(e)}", file=sys.stderr)
+        raise
 
 
 def post_report(results: dict[str, list[Listing]], errors: dict[str, str]) -> None:
