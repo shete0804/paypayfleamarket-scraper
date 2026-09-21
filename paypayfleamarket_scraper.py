@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3l
 """
 PayPay フリマ MEGA シリーズ カード価格モニター
 ============================================
@@ -38,8 +38,7 @@ from selenium.webdriver.chrome.options import Options
 # 設定
 # ---------------------------------------------------------------------------
 
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1550012278592638996/_ecmZfZm4Xq7cOwWPEVrp-iXSVs1t7B2Kv3PKERsMpC0T9tzSPxUMfiGxTvMo0BvjyHb").strip()
-
+https://discord.com/api/webhooks/1550012278592638996/_ecmZfZm4Xq7cOwWPEVrp-iXSVs1t7B2Kv3PKERsMpC0T9tzSPxUMfiGxTvMo0BvjyHb
 CARD_KEYWORDS: list[str] = [
     "メガルカリオex MUR メガブレイブ",
     "リーリエの決心 SAR メガブレイブ",
