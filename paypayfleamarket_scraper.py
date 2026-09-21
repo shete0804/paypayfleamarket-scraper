@@ -229,13 +229,16 @@ def _send(payload: dict) -> None:
     if not DISCORD_WEBHOOK_URL:
         print("DISCORD_WEBHOOK_URL 未設定のため送信をスキップ", file=sys.stderr)
         return
+    print(f"DEBUG: Sending payload to Discord webhook...", file=sys.stderr)
     resp = requests.post(
                     DISCORD_WEBHOOK_URL,
                     data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
                     headers={"Content-Type": "application/json; charset=utf-8"},
                     timeout=15
     )
+    print(f"DEBUG: Discord webhook response: {resp.status_code}", file=sys.stderr)
     resp.raise_for_status()
+    print(f"DEBUG: Discord webhook sent successfully", file=sys.stderr)
 
 
 def post_report(results: dict[str, list[Listing]], errors: dict[str, str]) -> None:
@@ -276,12 +279,16 @@ def post_failure(title: str, detail: str) -> None:
 
 
 def main() -> int:
+    print(f"DEBUG: DISCORD_WEBHOOK_URL={DISCORD_WEBHOOK_URL[:50]}..." if DISCORD_WEBHOOK_URL else "DEBUG: DISCORD_WEBHOOK_URL not set", file=sys.stderr)
+
     if not DISCORD_WEBHOOK_URL:
         print("環境変数 DISCORD_WEBHOOK_URL が必要です", file=sys.stderr)
         return 1
 
     try:
+        print("DEBUG: Starting fetch_all()", file=sys.stderr)
         results, errors = fetch_all()
+        print(f"DEBUG: fetch_all() completed. results: {len(results)} items, errors: {len(errors)} items", file=sys.stderr)
     except Exception:
         post_failure("スクレイピング失敗", traceback.format_exc())
         return 1
