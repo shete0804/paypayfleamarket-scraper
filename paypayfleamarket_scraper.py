@@ -40,7 +40,7 @@ from selenium.webdriver.chrome.service import Service
 # 設定
 # ---------------------------------------------------------------------------
 
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1550012278592389/ecmZfZm4Xq7cOwWPEVrp-iXSVs1t7B2Kv3PKERsMpC0T9tzSPxUMfiGxTvMo0BvjyHb").strip()
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
 CARD_KEYWORDS: list[str] = [
     "メガルカリオex MUR メガブレイブ",
     "リーリエの決心 SAR メガブレイブ",
