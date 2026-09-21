@@ -1,4 +1,4 @@
-#!/usr/bin/env python3l
+#!/usr/bin/env python3
 """
 PayPay フリマ MEGA シリーズ カード価格モニター
 ============================================
