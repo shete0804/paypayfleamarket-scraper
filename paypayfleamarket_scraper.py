@@ -231,47 +231,114 @@ def search_card(keyword: str) -> list[Listing]:
                 items = driver.find_elements(By.CSS_SELECTOR, "article[class*='Product']")
                 print(f"DEBUG: Found {len(items)} items with article[class*='Product'] selector", file=sys.stderr)
 
-            for item in items:
-                if len(listings) >= TOP_N:
-                    break
-
-                try:
-                    title_elem = item.find_element(By.CSS_SELECTOR, ".ProductCard__title")
-                    title = title_elem.text
-
-                    if not is_single_card(title):
-                        print(f"除外: {title}", file=sys.stderr)
-                        continue
-
-                    price_elem = item.find_element(
-                        By.CSS_SELECTOR, ".ProductCard__priceWrapper"
-                    )
-                    price_text = price_elem.text.replace("¥", "").replace(",", "")
+            # 要素が見つかった場合の処理
+            if items:
+                for item in items:
+                    if len(listings) >= TOP_N:
+                        break
 
                     try:
-                        price = int(price_text)
-                    except ValueError:
-                        print(f"無効な価格: {title} ({price_text})", file=sys.stderr)
+                        # セレクタの柔軟性を高める
+                        title_elem = None
+                        price_elem = None
+                        link_elem = None
+
+                        # タイトルを取得（複数の試行）
+                        for title_sel in [".ProductCard__title", "[class*='title']", "h2", "h3"]:
+                            try:
+                                title_elem = item.find_element(By.CSS_SELECTOR, title_sel)
+                                if title_elem.text:
+                                    break
+                            except:
+                                pass
+
+                        if not title_elem or not title_elem.text:
+                            continue
+
+                        title = title_elem.text
+
+                        if not is_single_card(title):
+                            print(f"除外: {title}", file=sys.stderr)
+                            continue
+
+                        # 価格を取得（複数の試行）
+                        for price_sel in [".ProductCard__priceWrapper", "[class*='price']", "span"]:
+                            try:
+                                elems = item.find_elements(By.CSS_SELECTOR, price_sel)
+                                for elem in elems:
+                                    price_text = elem.text.replace("¥", "").replace(",", "").strip()
+                                    if price_text and price_text[0].isdigit():
+                                        price_elem = elem
+                                        break
+                                if price_elem:
+                                    break
+                            except:
+                                pass
+
+                        if not price_elem:
+                            print(f"価格要素が見つかりません: {title}", file=sys.stderr)
+                            continue
+
+                        price_text = price_elem.text.replace("¥", "").replace(",", "")
+
+                        try:
+                            price = int(price_text)
+                        except ValueError:
+                            print(f"無効な価格: {title} ({price_text})", file=sys.stderr)
+                            continue
+
+                        # URL を取得
+                        link_elem = item.find_element(By.CSS_SELECTOR, "a")
+                        url = link_elem.get_attribute("href")
+
+                        if not url.startswith("http"):
+                            url = "https://www.paypayfleamarket.yahoo.co.jp" + url
+
+                        listings.append(Listing(card=keyword, price=price, url=url))
+                        print(
+                            f"取得: {title} - ¥{price:,}",
+                            file=sys.stderr,
+                        )
+
+                    except Exception as e:
+                        print(
+                            f"アイテム処理エラー ({keyword}): {type(e).__name__}: {e}",
+                            file=sys.stderr,
+                        )
                         continue
-
-                    link_elem = item.find_element(By.CSS_SELECTOR, "a")
-                    url = link_elem.get_attribute("href")
-
-                    if not url.startswith("http"):
-                        url = "https://www.paypayfleamarket.yahoo.co.jp" + url
-
-                    listings.append(Listing(card=keyword, price=price, url=url))
-                    print(
-                        f"取得: {title} - ¥{price:,}",
-                        file=sys.stderr,
-                    )
-
+            else:
+                # セレクタが見つからない場合、JavaScriptで直接取得を試みる
+                print(f"DEBUG: No items found with CSS selectors, trying JavaScript extraction", file=sys.stderr)
+                try:
+                    # ページ内のスクリプト変数からデータを抽出
+                    js_code = """
+                    return Array.from(document.querySelectorAll('[class*="ProductCard"], [class*="product"]'))
+                        .map(el => ({
+                            title: el.querySelector('[class*="title"]')?.textContent || '',
+                            price: el.querySelector('[class*="price"]')?.textContent || '',
+                            url: el.querySelector('a')?.href || ''
+                        }))
+                        .filter(p => p.title && p.price && p.url);
+                    """
+                    result = driver.execute_script(js_code)
+                    print(f"DEBUG: JavaScript extraction returned {len(result)} items", file=sys.stderr)
+                    for item_data in result[:TOP_N]:
+                        try:
+                            title = item_data['title'].strip()
+                            if not is_single_card(title):
+                                continue
+                            price_text = item_data['price'].replace("¥", "").replace(",", "").split()[0]
+                            price = int(price_text)
+                            url = item_data['url']
+                            if not url.startswith("http"):
+                                url = "https://www.paypayfleamarket.yahoo.co.jp" + url
+                            listings.append(Listing(card=keyword, price=price, url=url))
+                            print(f"取得（JS）: {title} - ¥{price:,}", file=sys.stderr)
+                        except Exception as e:
+                            print(f"JS抽出エラー: {e}", file=sys.stderr)
+                            continue
                 except Exception as e:
-                    print(
-                        f"アイテム処理エラー ({keyword}): {type(e).__name__}: {e}",
-                        file=sys.stderr,
-                    )
-                    continue
+                    print(f"DEBUG: JavaScript execution failed: {e}", file=sys.stderr)
 
             print(f"完了: {keyword} ({len(listings)} 件)", file=sys.stderr)
 
