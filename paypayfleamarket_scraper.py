@@ -162,13 +162,29 @@ def search_card(keyword: str) -> list[Listing]:
             driver.get(url)
 
             wait = WebDriverWait(driver, 10)
-            wait.until(
-                EC.presence_of_all_elements_located(
-                    (By.CSS_SELECTOR, ".ProductCard__title")
+            try:
+                wait.until(
+                    EC.presence_of_all_elements_located(
+                        (By.CSS_SELECTOR, ".ProductCard__title")
+                    )
                 )
-            )
+                print(f"DEBUG: .ProductCard__title wait successful", file=sys.stderr)
+            except Exception as e:
+                print(f"DEBUG: .ProductCard__title wait timed out: {e}", file=sys.stderr)
+                body_content = driver.find_element(By.TAG_NAME, "body").get_attribute("innerHTML")[:2000]
+                print(f"DEBUG: Page body sample: {body_content}", file=sys.stderr)
 
             items = driver.find_elements(By.CSS_SELECTOR, ".ProductCard")
+            print(f"DEBUG: Found {len(items)} items with .ProductCard selector", file=sys.stderr)
+
+            if not items:
+                print(f"DEBUG: .ProductCard not found, trying alternative selectors", file=sys.stderr)
+                items = driver.find_elements(By.CSS_SELECTOR, "[class*='ProductCard']")
+                print(f"DEBUG: Found {len(items)} items with [class*='ProductCard'] selector", file=sys.stderr)
+
+            if not items:
+                items = driver.find_elements(By.CSS_SELECTOR, ".c-productCard")
+                print(f"DEBUG: Found {len(items)} items with .c-productCard selector", file=sys.stderr)
 
             for item in items:
                 if len(listings) >= TOP_N:
