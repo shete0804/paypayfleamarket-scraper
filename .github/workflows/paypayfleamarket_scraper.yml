@@ -26,5 +26,5 @@ jobs:
 
       - name: Run scraper
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1550012278592638996/_ecmZfZm4Xq7cOwWPEVrp-iXSVs1t7B2Kv3PKERsMpC0T9tzSPxUMfiGxTvMo0BvjyHb"
         run: python paypayfleamarket_scraper.py
