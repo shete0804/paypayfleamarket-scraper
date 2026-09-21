@@ -197,7 +197,9 @@ def search_card(keyword: str) -> list[Listing]:
                     "[data-testid*='product']",
                     "article[class*='Product']",
                     ".product",
-                    "[class*='product-card']"
+                    "[class*='product-card']",
+                    "div[class*='card'][class*='product']",
+                    "[class*='item'][class*='product']"
                 ]
 
                 for selector in selectors_to_check:
