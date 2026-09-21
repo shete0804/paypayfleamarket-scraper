@@ -25,10 +25,17 @@ jobs:
 
       - name: Configure DNS
         run: |
+          echo "Configuring DNS with systemd-resolved..."
+          sudo mkdir -p /etc/systemd/resolved.conf.d/
+          cat | sudo tee /etc/systemd/resolved.conf.d/99-custom-dns.conf <<EOF
+[Resolve]
+DNS=8.8.8.8 1.1.1.1 9.9.9.9
+FallbackDNS=8.8.4.4 1.0.0.1
+EOF
+          sudo systemctl restart systemd-resolved
           echo "Testing DNS resolution..."
           nslookup www.paypayfleamarket.yahoo.co.jp || true
-          echo "nameserver 8.8.8.8" | sudo tee -a /etc/resolv.conf
-          echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf
+          cat /etc/resolv.conf
 
       - name: Install dependencies
         run: pip install -r paypayfleamarket_requirements.txt

@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import socket
 import sys
 import traceback
 from dataclasses import dataclass
@@ -41,6 +42,30 @@ from selenium.webdriver.chrome.service import Service
 # ---------------------------------------------------------------------------
 
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+
+socket.setdefaulttimeout(10)
+try:
+    socket.gaierror
+    import socket as sock_module
+    original_getaddrinfo = sock_module.getaddrinfo
+
+    def patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        try:
+            return original_getaddrinfo(host, port, family, type, proto, flags)
+        except socket.gaierror:
+            import subprocess
+            try:
+                result = subprocess.check_output(['nslookup', host, '8.8.8.8'], stderr=subprocess.DEVNULL, timeout=5).decode()
+                if 'Address:' in result:
+                    return original_getaddrinfo(host, port, family, type, proto, flags)
+            except:
+                pass
+            raise
+
+    sock_module.getaddrinfo = patched_getaddrinfo
+except:
+    pass
+
 CARD_KEYWORDS: list[str] = [
     "メガルカリオex MUR メガブレイブ",
     "リーリエの決心 SAR メガブレイブ",
