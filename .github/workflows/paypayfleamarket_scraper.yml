@@ -2,29 +2,29 @@ name: PayPay Flea Market Scraper
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 */6 * * *'
+    schedule:
+        - cron: '0 */6 * * *'
 
-jobs:
-  scrape:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
+        jobs:
+          scrape:
+              runs-on: ubuntu-latest
+                  timeout-minutes: 30
+                      steps:
+                            - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.12'
+                                  - uses: actions/setup-python@v4
+                                          with:
+                                                    python-version: '3.12'
 
-      - name: Install Chrome
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y chromium-browser chromium-chromedriver
+                                                          - name: Install Chrome
+                                                                  run: |
+                                                                            sudo apt-get update
+                                                                                      sudo apt-get install -y chromium-browser chromium-chromedriver
 
-      - name: Install dependencies
-        run: pip install -r paypayfleamarket_requirements.txt
-
-      - name: Run scraper
-        env:
-          DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1550012278592389/ecmZfZm4Xq7cOwWPEVrp-iXSVs1t7B2Kv3PKERsMpC0T9tzSPxUMfiGxTvMo0BvjyHb"
-                  run: python paypayfleamarket_scraper.py
+                                                                                            - name: Install dependencies
+                                                                                                    run: pip install -r paypayfleamarket_requirements.txt
+                                                                                                    
+                                                                                                          - name: Run scraper
+                                                                                                                  env:
+                                                                                                                            DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1550012278592389/ecmZfZm4Xq7cOwWPEVrp-iXSVs1t7B2Kv3PKERsMpC0T9tzSPxUMfiGxTvMo0BvjyHb"
+                                                                                                                                    run: python paypayfleamarket_scraper.py
