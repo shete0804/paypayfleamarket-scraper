@@ -38,4 +38,4 @@ jobs:
           git config --local user.name "GitHub Action"
           git add listings.json
           git commit -m "自動更新: PayPay フリマ最新価格取得 $(date +'%Y-%m-%d %H:%M JST')" || true
-          git push
+          git push https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
