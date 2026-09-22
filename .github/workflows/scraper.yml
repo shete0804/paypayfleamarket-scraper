@@ -22,8 +22,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run scraper
+      - name: Update listings from PayPay
+        run: python update_listings.py
+
+      - name: Send to Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
         run: python paypayfleamarket_scraper.py
