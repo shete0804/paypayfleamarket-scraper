@@ -21,34 +21,6 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Chrome
-        run: |
-          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list'
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-
-      - name: Configure DNS
-        run: |
-          echo "Configuring DNS..."
-          sudo mkdir -p /etc/systemd/resolved.conf.d/
-          cat <<'EOF' | sudo tee /etc/systemd/resolved.conf.d/99-custom-dns.conf
-          [Resolve]
-          DNS=8.8.8.8 1.1.1.1 9.9.9.9
-          FallbackDNS=8.8.4.4 1.0.0.1
-          DNSSEC=no
-          EOF
-          sudo systemctl restart systemd-resolved
-          sleep 2
-          echo "Setting /etc/resolv.conf nameservers..."
-          echo "nameserver 8.8.8.8" | sudo tee -a /etc/resolv.conf
-          echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf
-          echo "DNS configured. Testing resolution..."
-          for domain in www.paypayfleamarket.yahoo.co.jp google.com; do
-            echo "Testing $domain..."
-            nslookup "$domain" 8.8.8.8 || echo "Failed for $domain"
-          done
-
       - name: Install dependencies
         run: pip install -r paypayfleamarket_requirements.txt
 
