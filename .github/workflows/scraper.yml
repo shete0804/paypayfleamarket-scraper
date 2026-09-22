@@ -30,8 +30,11 @@ jobs:
       - name: "Debug: Fetch raw HTML"
         run: python debug_html.py
 
-      - name: Scrape and update
+      - name: Scrape and update PayPay
         run: python update_listings.py
+
+      - name: Scrape and update Mercari
+        run: python mercari_scraper.py
 
       - name: "Debug: Test scrape"
         run: python test_scrape.py 2>&1 || true

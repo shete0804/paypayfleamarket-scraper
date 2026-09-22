@@ -34,13 +34,13 @@ CARD_KEYWORDS = [
 TOP_N = 3
 JST = timezone(timedelta(hours=9))
 
-def load_listings():
-    """listings.json から価格を読み込み"""
+def load_listings(filename):
+    """JSON ファイルから価格を読み込み"""
     try:
-        with open("listings.json", "r", encoding="utf-8") as f:
+        with open(filename, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"listings.json の読み込みエラー: {e}", file=sys.stderr)
+        print(f"{filename} の読み込みエラー: {e}", file=sys.stderr)
         return {}
 
 def fmt_price(price):
@@ -65,23 +65,42 @@ def main():
         print("環境変数 DISCORD_WEBHOOK_URL が必要です", file=sys.stderr)
         return 1
 
-    listings = load_listings()
-    if not listings:
-        print("listings.json が見つかりません", file=sys.stderr)
+    paypal = load_listings("listings.json")
+    mercari = load_listings("listings_mercari.json")
+
+    if not paypal and not mercari:
+        print("listings.json と listings_mercari.json が見つかりません", file=sys.stderr)
         return 1
 
     fields = []
     for keyword in CARD_KEYWORDS:
-        items = listings.get(keyword, [])
-        if items:
-            value = "\n".join(f"[{fmt_price(item['price'])}]({item['url']})" for item in items[:TOP_N])
+        paypal_items = paypal.get(keyword, [])
+        mercari_items = mercari.get(keyword, [])
+
+        paypal_price = paypal_items[0]["price"] if paypal_items else None
+        mercari_price = mercari_items[0]["price"] if mercari_items else None
+
+        if paypal_price and mercari_price:
+            diff = mercari_price - paypal_price
+            if diff > 0:
+                comp = f"PayPay が安い ⭐ ({fmt_price(diff)})"
+            elif diff < 0:
+                comp = f"メルカリが安い ⭐ ({fmt_price(-diff)})"
+            else:
+                comp = "同一価格"
+            value = f"PayPay: {fmt_price(paypal_price)} → メルカリ: {fmt_price(mercari_price)}\n{comp}"
+        elif paypal_price:
+            value = f"PayPay: {fmt_price(paypal_price)}"
+        elif mercari_price:
+            value = f"メルカリ: {fmt_price(mercari_price)}"
         else:
-            value = "登録なし"
+            value = "価格情報なし"
+
         fields.append({"name": keyword, "value": value, "inline": False})
 
     embed = {
-        "title": "PayPay フリマ MEGA シリーズ 価格情報",
-        "description": f"最安 {TOP_N} 件 / {now_jst()}",
+        "title": "PayPay フリマ × メルカリ 価格比較",
+        "description": f"MEGA シリーズ / {now_jst()}",
         "color": 0x003DA5,
         "fields": fields[:25],
         "footer": {"text": "6 時間ごと自動実行"},
