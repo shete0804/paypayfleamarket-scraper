@@ -400,7 +400,11 @@ def main() -> int:
         print("DEBUG: Starting fetch_all()", file=sys.stderr)
         results, errors = fetch_all()
         print(f"DEBUG: fetch_all() completed. results: {len(results)} items, errors: {len(errors)} items", file=sys.stderr)
-    except Exception:
+        if errors:
+            print(f"DEBUG: Errors encountered: {errors}", file=sys.stderr)
+    except Exception as e:
+        print(f"DEBUG: Exception in fetch_all(): {type(e).__name__}: {e}", file=sys.stderr)
+        print(f"DEBUG: Traceback: {traceback.format_exc()}", file=sys.stderr)
         post_failure("スクレイピング失敗", traceback.format_exc())
         return 1
 
