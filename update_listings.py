@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""PayPay Flea Market - Attempt Real Price Scraping with Fallback"""
+"""PayPay Flea Market - Playwright Browser Automation with Fallback"""
 
 import json
 import sys
-import requests
+import asyncio
+from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
-from urllib3.util.retry import Retry
-from requests.adapters import HTTPAdapter
-import re
 import signal
 
 # Timeout handler
@@ -15,7 +13,7 @@ def timeout_handler(signum, frame):
     raise TimeoutError("Scraping timeout exceeded")
 
 signal.signal(signal.SIGALRM, timeout_handler)
-signal.alarm(60)  # 60秒タイムアウト
+signal.alarm(120)  # 120秒タイムアウト
 
 CARD_KEYWORDS = [
     "メガルカリオex MUR メガブレイブ",
@@ -132,51 +130,41 @@ FALLBACK_DATA = {
     ],
 }
 
-def scrape_prices():
-    """Attempt to scrape real prices from PayPay Flea Market with retries"""
+async def scrape_prices_playwright():
+    """Scrape real prices using Playwright browser automation"""
     try:
-        print("Attempting to scrape PayPay prices...", file=sys.stderr)
+        print("Attempting to scrape PayPay prices with Playwright...", file=sys.stderr)
 
-        # Setup retry strategy
-        session = requests.Session()
-        retry_strategy = Retry(
-            total=3,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["GET"]
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("https://", adapter)
-        session.mount("http://", adapter)
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            )
+            page = await context.new_page()
 
-        # Multiple User-Agent patterns
-        user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
-        ]
+            scraped_data = {}
+            success_count = 0
 
-        scraped_data = {}
-        success_count = 0
+            for keyword in CARD_KEYWORDS:
+                try:
+                    url = f"https://www.paypayfleamarket.yahoo.co.jp/search?keyword={keyword}"
+                    print(f"Loading {keyword}...", file=sys.stderr)
 
-        for idx, keyword in enumerate(CARD_KEYWORDS):
-            try:
-                url = f"https://www.paypayfleamarket.yahoo.co.jp/search?keyword={keyword}"
-                headers = {"User-Agent": user_agents[idx % len(user_agents)]}
+                    await page.goto(url, wait_until="networkidle", timeout=15000)
+                    await page.wait_for_timeout(2000)  # Wait for JS to render
 
-                response = session.get(url, headers=headers, timeout=10)
-                if response.status_code == 200:
-                    soup = BeautifulSoup(response.content, "html.parser")
+                    content = await page.content()
+                    soup = BeautifulSoup(content, "html.parser")
                     items = []
 
-                    # Try multiple selectors
-                    price_elements = soup.find_all(class_=lambda x: x and ("price" in x.lower() or "amount" in x.lower()))
+                    # Find price elements in rendered HTML
+                    price_elements = soup.find_all(class_=lambda x: x and ("price" in x.lower() or "amount" in x.lower() or "product" in x.lower()))
 
                     if price_elements:
                         for elem in price_elements[:3]:
                             try:
-                                price_text = "".join(filter(str.isdigit, elem.text[:20]))
-                                if price_text:
+                                price_text = "".join(filter(str.isdigit, elem.text[:30]))
+                                if price_text and len(price_text) >= 3:
                                     items.append({
                                         "title": keyword,
                                         "price": int(price_text),
@@ -188,20 +176,31 @@ def scrape_prices():
                     if items:
                         scraped_data[keyword] = items
                         success_count += 1
+                        print(f"✓ Found {len(items)} prices for {keyword}", file=sys.stderr)
 
-            except Exception as e:
-                print(f"Error scraping {keyword}: {e}", file=sys.stderr)
-                continue
+                except Exception as e:
+                    print(f"Error scraping {keyword}: {type(e).__name__}: {str(e)[:100]}", file=sys.stderr)
+                    continue
 
-        if success_count > 0:
-            print(f"SUCCESS: Scraped {success_count} cards with real prices!", file=sys.stderr)
-            return scraped_data
-        else:
-            print("FAILED: No prices found - using fallback data", file=sys.stderr)
-            return FALLBACK_DATA
+            await browser.close()
+
+            if success_count > 0:
+                print(f"SUCCESS: Scraped {success_count} cards with real prices!", file=sys.stderr)
+                return scraped_data
+            else:
+                print("FAILED: No prices found - using fallback data", file=sys.stderr)
+                return FALLBACK_DATA
 
     except Exception as e:
-        print(f"Scraping error: {e} - using fallback data", file=sys.stderr)
+        print(f"Playwright error: {type(e).__name__}: {str(e)[:100]} - using fallback data", file=sys.stderr)
+        return FALLBACK_DATA
+
+def scrape_prices():
+    """Wrapper to run async scraping"""
+    try:
+        return asyncio.run(scrape_prices_playwright())
+    except Exception as e:
+        print(f"Async error: {e} - using fallback data", file=sys.stderr)
         return FALLBACK_DATA
 
 def main():
