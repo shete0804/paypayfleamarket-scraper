@@ -144,17 +144,6 @@ def search_card(keyword: str) -> list[Listing]:
     try:
         print(f"検索中: {keyword}", file=sys.stderr)
 
-        # Ensure debug output directory exists
-        debug_dir = "debug_output"
-        os.makedirs(debug_dir, exist_ok=True)
-
-        import socket
-        try:
-            ip_addr = socket.gethostbyname("www.paypayfleamarket.yahoo.co.jp")
-            print(f"DEBUG: Resolved www.paypayfleamarket.yahoo.co.jp to {ip_addr}", file=sys.stderr)
-        except Exception as e:
-            print(f"DEBUG: DNS resolution failed: {e}", file=sys.stderr)
-
         chrome_options = Options()
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
@@ -169,263 +158,116 @@ def search_card(keyword: str) -> list[Listing]:
 
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver.implicitly_wait(15)
 
         try:
-            url = f"https://www.paypayfleamarket.yahoo.co.jp/search?keyword={urlencode({'q': keyword})}&sort=score"
-            print(f"DEBUG: Accessing URL: {url}", file=sys.stderr)
-            driver.get(url)
+            # トップページに移動
+            print(f"PayPay フリマのトップページにアクセス中", file=sys.stderr)
+            driver.get("https://www.paypayfleamarket.yahoo.co.jp/")
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.NAME, "word"))
+            )
 
-            wait = WebDriverWait(driver, 20)
+            # 検索欄に「keyword + 新品」と入力
+            search_box = driver.find_element(By.NAME, "word")
+            search_box.clear()
+            search_box.send_keys(f"{keyword} 新品")
+            print(f"検索欄に入力: {keyword} 新品", file=sys.stderr)
 
-            # JavaScriptが実行されるまで待機
+            # 検索ボタンをクリック
+            search_btn = driver.find_element(By.CSS_SELECTOR, ".sc-14dcb79f-4 > img, button[type='submit'], [class*='search'][class*='button']")
+            search_btn.click()
+            print(f"検索実行", file=sys.stderr)
+            WebDriverWait(driver, 15).until(
+                EC.url_contains("search")
+            )
+
+            # 「販売中のみ」フィルターをクリック（最初の検索結果から）
             try:
-                wait.until(
-                    EC.presence_of_all_elements_located(
-                        (By.CSS_SELECTOR, "[class*='ProductCard']")
-                    )
+                # 販売中チェックボックスを見つけてクリック
+                live_only_checkbox = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='checkbox'][class*='live'], input[type='checkbox'][class*='status']"))
                 )
-                print(f"DEBUG: ProductCard elements detected", file=sys.stderr)
+                if not live_only_checkbox.is_selected():
+                    driver.execute_script("arguments[0].click();", live_only_checkbox)
+                    print(f"「販売中のみ」フィルターを有効化", file=sys.stderr)
+                    WebDriverWait(driver, 10).until(
+                        EC.staleness_of(live_only_checkbox)
+                    )
             except Exception as e:
-                print(f"DEBUG: ProductCard wait timed out: {e}", file=sys.stderr)
+                print(f"フィルター処理をスキップ: {e}", file=sys.stderr)
 
-            # ページスクリーンショット（デバッグ用）
+            # 最初の商品をクリック
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, "a[href*='item/'], [class*='ProductCard'] a"))
+            )
+            product_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='item/'], [class*='ProductCard'] a, [class*='product'] a")
+            if not product_links:
+                print(f"商品リンクが見つかりません", file=sys.stderr)
+                return listings
+
+            first_link = product_links[0]
+            driver.execute_script("arguments[0].click();", first_link)
+            print(f"最初の商品をクリック", file=sys.stderr)
+            WebDriverWait(driver, 15).until(
+                EC.url_contains("item/")
+            )
+
+            # 詳細ページから商品データを抽出
+            current_url = driver.current_url
+            print(f"詳細ページURL: {current_url}", file=sys.stderr)
+
             try:
-                screenshot_path = os.path.join(debug_dir, f"paypay_search_{keyword.replace(' ', '_')}.png")
-                driver.save_screenshot(screenshot_path)
-                print(f"DEBUG: Screenshot saved to {screenshot_path}", file=sys.stderr)
-            except Exception as e:
-                print(f"DEBUG: Screenshot save failed: {e}", file=sys.stderr)
-
-            # ページ全体のHTMLをダンプして分析
-            try:
-                body_html = driver.find_element(By.TAG_NAME, "body").get_attribute("innerHTML")
-                print(f"DEBUG: Page HTML length: {len(body_html)} characters", file=sys.stderr)
-
-                # 複数のセレクタを試して確認
-                selectors_to_check = [
-                    ".ProductCard",
-                    "[class*='ProductCard']",
-                    ".c-productCard",
-                    "[data-testid*='product']",
-                    "article[class*='Product']",
-                    ".product",
-                    "[class*='product-card']",
-                    "div[class*='card'][class*='product']",
-                    "[class*='item'][class*='product']"
-                ]
-
-                for selector in selectors_to_check:
+                # 商品名を取得
+                title_selectors = ["h1 span", "h1", "[class*='ItemName']", "[class*='productName']"]
+                title = None
+                for selector in title_selectors:
                     try:
-                        found = driver.find_elements(By.CSS_SELECTOR, selector)
-                        if found:
-                            print(f"DEBUG: Selector '{selector}' found {len(found)} items", file=sys.stderr)
+                        elem = WebDriverWait(driver, 10).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                        )
+                        title = elem.text.strip()
+                        if title and len(title) > 0:
+                            break
                     except:
                         pass
 
-            except Exception as e:
-                print(f"DEBUG: Error dumping HTML: {e}", file=sys.stderr)
+                if not title:
+                    print(f"商品名が取得できません", file=sys.stderr)
+                    return listings
 
-            items = driver.find_elements(By.CSS_SELECTOR, ".ProductCard")
-            print(f"DEBUG: Found {len(items)} items with .ProductCard selector", file=sys.stderr)
+                print(f"商品名: {title}", file=sys.stderr)
 
-            if not items:
-                print(f"DEBUG: .ProductCard not found, trying alternative selectors", file=sys.stderr)
-                items = driver.find_elements(By.CSS_SELECTOR, "[class*='ProductCard']")
-                print(f"DEBUG: Found {len(items)} items with [class*='ProductCard'] selector", file=sys.stderr)
+                if not is_single_card(title):
+                    print(f"除外（複数枚セット等）: {title}", file=sys.stderr)
+                    return listings
 
-            if not items:
-                items = driver.find_elements(By.CSS_SELECTOR, ".c-productCard")
-                print(f"DEBUG: Found {len(items)} items with .c-productCard selector", file=sys.stderr)
-
-            if not items:
-                items = driver.find_elements(By.CSS_SELECTOR, "[data-testid*='product']")
-                print(f"DEBUG: Found {len(items)} items with [data-testid*='product'] selector", file=sys.stderr)
-
-            if not items:
-                items = driver.find_elements(By.CSS_SELECTOR, "article[class*='Product']")
-                print(f"DEBUG: Found {len(items)} items with article[class*='Product'] selector", file=sys.stderr)
-
-            # 要素が見つかった場合の処理
-            if items:
-                for item in items:
-                    if len(listings) >= TOP_N:
-                        break
-
+                # 価格を取得
+                price_selectors = ["[class*='Price'] span", "span[class*='price']", "[class*='ItemPrice'] span"]
+                price = None
+                for selector in price_selectors:
                     try:
-                        # セレクタの柔軟性を高める
-                        title_elem = None
-                        price_elem = None
-                        link_elem = None
-
-                        # タイトルを取得（複数の試行）
-                        for title_sel in [".ProductCard__title", "[class*='title']", "h2", "h3"]:
-                            try:
-                                title_elem = item.find_element(By.CSS_SELECTOR, title_sel)
-                                if title_elem.text:
-                                    break
-                            except:
-                                pass
-
-                        if not title_elem or not title_elem.text:
-                            continue
-
-                        title = title_elem.text
-
-                        if not is_single_card(title):
-                            print(f"除外: {title}", file=sys.stderr)
-                            continue
-
-                        # 価格を取得（複数の試行）
-                        for price_sel in [".ProductCard__priceWrapper", "[class*='price']", "span"]:
-                            try:
-                                elems = item.find_elements(By.CSS_SELECTOR, price_sel)
-                                for elem in elems:
-                                    price_text = elem.text.replace("¥", "").replace(",", "").strip()
-                                    if price_text and price_text[0].isdigit():
-                                        price_elem = elem
-                                        break
-                                if price_elem:
-                                    break
-                            except:
-                                pass
-
-                        if not price_elem:
-                            print(f"価格要素が見つかりません: {title}", file=sys.stderr)
-                            continue
-
-                        price_text = price_elem.text.replace("¥", "").replace(",", "")
-
-                        try:
-                            price = int(price_text)
-                        except ValueError:
-                            print(f"無効な価格: {title} ({price_text})", file=sys.stderr)
-                            continue
-
-                        # URL を取得
-                        link_elem = item.find_element(By.CSS_SELECTOR, "a")
-                        url = link_elem.get_attribute("href")
-
-                        if not url.startswith("http"):
-                            url = "https://www.paypayfleamarket.yahoo.co.jp" + url
-
-                        listings.append(Listing(card=keyword, price=price, url=url))
-                        print(
-                            f"取得: {title} - ¥{price:,}",
-                            file=sys.stderr,
+                        elem = WebDriverWait(driver, 10).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, selector))
                         )
-
-                    except Exception as e:
-                        print(
-                            f"アイテム処理エラー ({keyword}): {type(e).__name__}: {e}",
-                            file=sys.stderr,
-                        )
-                        continue
-            else:
-                # セレクタが見つからない場合、JavaScriptで直接取得を試みる
-                print(f"DEBUG: No items found with CSS selectors, trying aggressive JavaScript extraction", file=sys.stderr)
-                try:
-                    # より攻撃的な DOM 走査: すべての div を検査
-                    js_code = """
-                    const items = [];
-
-                    // 戦略1: すべての article タグを検査
-                    document.querySelectorAll('article').forEach(article => {
-                        const titleEl = article.querySelector('h1, h2, h3, .ProductCard__title, [class*="title"]');
-                        const priceEl = Array.from(article.querySelectorAll('*')).find(el => {
-                            const text = el.textContent || '';
-                            return /¥|￥/.test(text) && /\d/.test(text);
-                        });
-                        const linkEl = article.querySelector('a[href]');
-
-                        if (titleEl && priceEl && linkEl) {
-                            items.push({
-                                title: titleEl.textContent.trim(),
-                                price: priceEl.textContent.trim(),
-                                url: linkEl.href
-                            });
-                        }
-                    });
-
-                    // 戦略2: 任意のコンテナ（class*="product"やclass*="card"）を検査
-                    if (items.length === 0) {
-                        document.querySelectorAll('[class*="product"], [class*="card"]').forEach(container => {
-                            const titleEl = container.querySelector('h1, h2, h3, [class*="title"]');
-                            const priceEl = Array.from(container.querySelectorAll('*')).find(el => {
-                                const text = el.textContent || '';
-                                return /¥|￥/.test(text) && /\d/.test(text) && text.length < 50;
-                            });
-                            const linkEl = container.querySelector('a[href]');
-
-                            if (titleEl && priceEl && linkEl && titleEl.textContent.trim().length > 3) {
-                                const existing = items.find(i => i.title === titleEl.textContent.trim());
-                                if (!existing) {
-                                    items.push({
-                                        title: titleEl.textContent.trim(),
-                                        price: priceEl.textContent.trim(),
-                                        url: linkEl.href
-                                    });
-                                }
-                            }
-                        });
-                    }
-
-                    // 戦略3: ページ全体から価格リンクを走査（最後の手段）
-                    if (items.length === 0) {
-                        const pricePattern = /¥|￥/;
-                        const urlPattern = /paypayfleamarket|yahoo/i;
-
-                        // すべてのリンクをチェック
-                        document.querySelectorAll('a[href]').forEach(link => {
-                            if (items.length >= 10) return;
-
-                            const href = link.href;
-                            const text = link.textContent || '';
-                            const parent = link.closest('[class*="product"], [class*="card"], article, div[class*="item"]');
-
-                            if (href && urlPattern.test(href) && parent) {
-                                // 親要素内で価格と タイトルを探す
-                                const parentText = parent.textContent || '';
-                                const priceMatch = parentText.match(/¥|￥/);
-                                const titleEl = parent.querySelector('h1, h2, h3, [class*="title"]');
-
-                                if (priceMatch && titleEl) {
-                                    const title = titleEl.textContent.trim();
-                                    if (title.length > 3 && !items.find(i => i.title === title)) {
-                                        const priceText = parentText.split(/\n/).find(line => /¥|￥/.test(line));
-                                        if (priceText) {
-                                            items.push({
-                                                title: title,
-                                                price: priceText.trim(),
-                                                url: href
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                        });
-                    }
-
-                    return items.slice(0, 10);
-                    """
-                    result = driver.execute_script(js_code)
-                    print(f"DEBUG: Aggressive JavaScript extraction returned {len(result)} items", file=sys.stderr)
-                    for item_data in result[:TOP_N]:
-                        try:
-                            title = item_data['title'].strip()
-                            if not is_single_card(title):
-                                continue
-                            price_text = item_data['price'].replace("¥", "").replace("￥", "").replace(",", "").split()[0]
+                        price_text = elem.text.replace("¥", "").replace("￥", "").replace(",", "").split()[0]
+                        if price_text.isdigit():
                             price = int(price_text)
-                            url = item_data['url']
-                            if not url.startswith("http"):
-                                url = "https://www.paypayfleamarket.yahoo.co.jp" + url
-                            listings.append(Listing(card=keyword, price=price, url=url))
-                            print(f"取得（JS）: {title} - ¥{price:,}", file=sys.stderr)
-                        except Exception as e:
-                            print(f"JS抽出エラー: {e}", file=sys.stderr)
-                            continue
-                except Exception as e:
-                    print(f"DEBUG: JavaScript execution failed: {e}", file=sys.stderr)
+                            break
+                    except:
+                        pass
+
+                if not price:
+                    print(f"価格が取得できません: {title}", file=sys.stderr)
+                    return listings
+
+                print(f"価格: ¥{price:,}", file=sys.stderr)
+
+                listings.append(Listing(card=keyword, price=price, url=current_url))
+                print(f"取得完了: {title} - ¥{price:,}", file=sys.stderr)
+
+            except Exception as e:
+                print(f"詳細ページ抽出エラー: {type(e).__name__}: {e}", file=sys.stderr)
 
             print(f"完了: {keyword} ({len(listings)} 件)", file=sys.stderr)
 
