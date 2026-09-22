@@ -170,12 +170,23 @@ def search_card(keyword: str) -> list[Listing]:
         driver.implicitly_wait(15)
 
         try:
-            # トップページに移動
+            # トップページに移動（リトライ付き）
             print(f"PayPay フリマのトップページにアクセス中", file=sys.stderr)
-            driver.get("https://www.paypayfleamarket.yahoo.co.jp/")
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.NAME, "word"))
-            )
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    driver.get("https://www.paypayfleamarket.yahoo.co.jp/")
+                    WebDriverWait(driver, 15).until(
+                        EC.presence_of_element_located((By.NAME, "word"))
+                    )
+                    print(f"トップページアクセス成功（試行 {attempt + 1}/{max_retries}）", file=sys.stderr)
+                    break
+                except Exception as retry_error:
+                    print(f"トップページアクセス失敗（試行 {attempt + 1}/{max_retries}）: {retry_error}", file=sys.stderr)
+                    if attempt == max_retries - 1:
+                        raise
+                    import time
+                    time.sleep(2)
 
             # 検索欄に「keyword + 新品」と入力
             search_box = driver.find_element(By.NAME, "word")
