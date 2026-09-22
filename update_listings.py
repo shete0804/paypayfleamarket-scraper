@@ -49,28 +49,42 @@ def scrape_card(keyword: str) -> list:
         print(f"DEBUG: Status={response.status_code}", file=sys.stderr)
 
         html_text = response.content.decode('utf-8', errors='ignore')
-        json_ld_match = re.search(r'<script type="application/ld\+json">([^<]+)</script>', html_text)
+        # より柔軟な JSON-LD 検出（改行・空白を許容）
+        json_ld_match = re.search(r'<script\s+type="application/ld\+json">(.+?)</script>', html_text, re.DOTALL)
 
         if not json_ld_match:
-            print(f"DEBUG: JSON-LD スキーマが見つかりません", file=sys.stderr)
+            # 別パターン：シングルクォート
+            json_ld_match = re.search(r"<script\s+type='application/ld\+json'>(.+?)</script>", html_text, re.DOTALL)
+
+        if not json_ld_match:
+            print(f"DEBUG: JSON-LD が見つかりません。HTML: {html_text[:500]}", file=sys.stderr)
             return []
 
+        json_str = json_ld_match.group(1).strip()
         try:
-            schemas = json.loads(json_ld_match.group(1))
+            schemas = json.loads(json_str)
             if not isinstance(schemas, list):
                 schemas = [schemas]
+            print(f"DEBUG: {len(schemas)} schemas parsed", file=sys.stderr)
         except json.JSONDecodeError as e:
-            print(f"DEBUG: JSON パースエラー: {e}", file=sys.stderr)
+            print(f"DEBUG: JSON parse error: {e} - first 200 chars: {json_str[:200]}", file=sys.stderr)
             return []
 
         item_urls = []
-        for schema in schemas:
-            if schema.get("@type") == "ItemList" and "itemListElement" in schema:
-                for item in schema["itemListElement"]:
-                    if "url" in item:
-                        item_urls.append(item["url"])
+        for i, schema in enumerate(schemas):
+            if isinstance(schema, dict):
+                if schema.get("@type") == "ItemList":
+                    items = schema.get("itemListElement", [])
+                    print(f"DEBUG: Schema {i} is ItemList with {len(items)} items", file=sys.stderr)
+                    for item in items:
+                        if isinstance(item, dict) and "url" in item:
+                            item_urls.append(item["url"])
+                else:
+                    print(f"DEBUG: Schema {i} type: {schema.get('@type')}", file=sys.stderr)
 
-        print(f"DEBUG: JSON-LD から {len(item_urls)} 個の URL を抽出", file=sys.stderr)
+        print(f"DEBUG: Extracted {len(item_urls)} URLs from JSON-LD", file=sys.stderr)
+        if not item_urls:
+            print(f"DEBUG: First schema structure: {str(schemas[0])[:300]}", file=sys.stderr)
 
         results = []
         for item_url in item_urls[:10]:
@@ -106,7 +120,9 @@ def scrape_card(keyword: str) -> list:
         return results
 
     except Exception as e:
-        print(f"エラー ({keyword}): {e}", file=sys.stderr)
+        print(f"ERROR ({keyword}): {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         return []
 
 def update_listings():
