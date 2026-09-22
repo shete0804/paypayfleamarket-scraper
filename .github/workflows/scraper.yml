@@ -27,6 +27,9 @@ jobs:
       - name: Scrape and update
         run: python update_listings.py
 
+      - name: Debug: Test scrape
+        run: python test_scrape.py
+
       - name: Send to Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
