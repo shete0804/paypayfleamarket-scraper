@@ -79,22 +79,6 @@ except Exception as patch_error:
 CARD_KEYWORDS: list[str] = [
     "メガルカリオex MUR メガブレイブ",
     "リーリエの決心 SAR メガブレイブ",
-    "メガサーナイトex MUR メガシンフォニア",
-    "メガサーナイトex SAR メガシンフォニア",
-    "メガリザードンXex MUR インフェルノX",
-    "メガリザードンXex SAR インフェルノX",
-    "メガカイリューex MUR MEGAドリームex",
-    "ピカチュウex SAR MEGAドリームex",
-    "ロケット団のミュウツーex SAR MEGAドリームex",
-    "メガゲンガーex SAR MEGAドリームex",
-    "メガカイリューex SAR MEGAドリームex",
-    "メガジガルデex MUR ムニキスゼロ",
-    "ニャースex SAR ムニキスゼロ",
-    "メイのはげまし SAR ムニキスゼロ",
-    "メガゲッコウガex MUR ニンジャスピナー",
-    "メガゲッコウガex SAR ニンジャスピナー",
-    "メガダークライex MUR アビスアイ",
-    "メガダークライex SAR アビスアイ",
 ]
 
 TOP_N = 3
