@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import traceback
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -98,11 +99,11 @@ def is_single_card(title: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# PayPay フリマ検索
+# データ取得
 # ---------------------------------------------------------------------------
 
 
-def search_card(keyword: str) -> list[Listing]:
+def fetch_all() -> tuple[dict[str, list[Listing]], dict[str, str]]:
     listings: list[Listing] = []
 
     try:
