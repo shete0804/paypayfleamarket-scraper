@@ -238,26 +238,35 @@ def search_card(keyword: str) -> list[Listing]:
             print(f"詳細ページURL: {current_url}", file=sys.stderr)
 
             try:
-                # 商品名を取得（複数セレクタ + JavaScript フォールバック）
-                title_selectors = ["h1 span", "h1", "[class*='ItemName']", "[class*='productName']", "div[class*='item'] h1", "div[class*='title']"]
-                title = None
-                for selector in title_selectors:
-                    try:
-                        elem = WebDriverWait(driver, 10).until(
-                            EC.presence_of_element_located((By.CSS_SELECTOR, selector))
-                        )
-                        title = elem.text.strip()
-                        if title and len(title) > 5:  # 商品名は通常 5 文字以上
-                            break
-                    except:
-                        pass
+                # DOM 全体をスキャンしてテキストを取得
+                page_text = driver.execute_script("return document.body.innerText || ''")
+                print(f"ページテキスト取得: {len(page_text)} 文字", file=sys.stderr)
 
-                # JavaScript フォールバック：h1 要素をすべて試す
+                # 正規表現で商品名と価格を抽出
+                # 商品名：keyword を含む 5 文字以上のテキスト
+                import re
+
+                title = None
+                price = None
+
+                # 商品名抽出：keyword を含み、複数単語セット除外語を含まない行を探す
+                lines = page_text.split('\n')
+                for line in lines:
+                    line = line.strip()
+                    if keyword in line and len(line) > 5:
+                        if not any(exclude in line for exclude in EXCLUDE_KEYWORDS):
+                            title = line
+                            print(f"商品名候補: {line}", file=sys.stderr)
+                            break
+
+                # 代替：最初の有意なタイトル形式を探す
                 if not title:
-                    try:
-                        title = driver.execute_script("return document.querySelector('h1')?.textContent || ''").strip()
-                    except:
-                        pass
+                    for line in lines:
+                        line = line.strip()
+                        if 5 < len(line) < 200 and not any(exclude in line for exclude in EXCLUDE_KEYWORDS):
+                            if not any(c.isdigit() for c in line[:5]):  # 最初の 5 文字に数字がない
+                                title = line
+                                break
 
                 if not title:
                     print(f"商品名が取得できません", file=sys.stderr)
@@ -269,29 +278,16 @@ def search_card(keyword: str) -> list[Listing]:
                     print(f"除外（複数枚セット等）: {title}", file=sys.stderr)
                     return listings
 
-                # 価格を取得（複数セレクタ + JavaScript フォールバック）
-                price_selectors = ["[class*='Price'] span", "span[class*='price']", "[class*='ItemPrice'] span", "[class*='price']"]
-                price = None
-                for selector in price_selectors:
-                    try:
-                        elem = WebDriverWait(driver, 10).until(
-                            EC.presence_of_element_located((By.CSS_SELECTOR, selector))
-                        )
-                        price_text = elem.text.replace("¥", "").replace("￥", "").replace(",", "").split()[0]
-                        if price_text.isdigit():
-                            price = int(price_text)
-                            break
-                    except:
-                        pass
+                # 価格抽出：¥XXXXX 形式または数字 5 桁以上
+                price_match = re.search(r'¥[\s]?(\d+(?:,\d+)*)', page_text)
+                if not price_match:
+                    # 代替：単純な数字を探す（4 桁以上）
+                    price_match = re.search(r'\b(\d{4,})\b', page_text)
 
-                # JavaScript フォールバック：¥ で始まるテキストを探す
-                if not price:
+                if price_match:
+                    price_str = price_match.group(1).replace(',', '')
                     try:
-                        price_text = driver.execute_script(
-                            "return Array.from(document.querySelectorAll('*')).find(el => /¥\\d+/.test(el.textContent))?.textContent || ''"
-                        ).replace("¥", "").replace("￥", "").replace(",", "").split()[0]
-                        if price_text.isdigit():
-                            price = int(price_text)
+                        price = int(price_str)
                     except:
                         pass
 
