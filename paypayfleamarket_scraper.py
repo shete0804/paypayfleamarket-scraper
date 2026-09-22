@@ -31,6 +31,7 @@ from urllib.parse import urlencode
 import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
@@ -194,9 +195,35 @@ def search_card(keyword: str) -> list[Listing]:
             search_box.send_keys(f"{keyword} 新品")
             print(f"検索欄に入力: {keyword} 新品", file=sys.stderr)
 
-            # 検索ボタンをクリック
-            search_btn = driver.find_element(By.CSS_SELECTOR, ".sc-14dcb79f-4 > img, button[type='submit'], [class*='search'][class*='button']")
-            search_btn.click()
+            # 検索ボタンをクリック（複数のセレクタで試行）
+            search_btn_selectors = [
+                ".sc-14dcb79f-4 > img",
+                "button[type='submit']",
+                "[class*='search'][class*='button']",
+                "button",
+                "[role='button']",
+                "input[type='submit']"
+            ]
+            search_btn = None
+            for selector in search_btn_selectors:
+                try:
+                    candidates = driver.find_elements(By.CSS_SELECTOR, selector)
+                    if candidates:
+                        search_btn = candidates[0]
+                        print(f"検索ボタン検出: {selector}", file=sys.stderr)
+                        break
+                except:
+                    pass
+
+            if not search_btn:
+                print(f"検索ボタンが見つかりません。Enterキーで検索実行", file=sys.stderr)
+                search_box.send_keys(Keys.RETURN)
+            else:
+                try:
+                    search_btn.click()
+                except:
+                    print(f"ボタンクリック失敗。JavaScript実行で代替", file=sys.stderr)
+                    driver.execute_script("arguments[0].click();", search_btn)
             print(f"検索実行", file=sys.stderr)
             WebDriverWait(driver, 15).until(
                 EC.url_contains("search")
