@@ -357,6 +357,42 @@ def search_card(keyword: str) -> list[Listing]:
                         });
                     }
 
+                    // 戦略3: ページ全体から価格リンクを走査（最後の手段）
+                    if (items.length === 0) {
+                        const pricePattern = /¥|￥/;
+                        const urlPattern = /paypayfleamarket|yahoo/i;
+
+                        // すべてのリンクをチェック
+                        document.querySelectorAll('a[href]').forEach(link => {
+                            if (items.length >= 10) return;
+
+                            const href = link.href;
+                            const text = link.textContent || '';
+                            const parent = link.closest('[class*="product"], [class*="card"], article, div[class*="item"]');
+
+                            if (href && urlPattern.test(href) && parent) {
+                                // 親要素内で価格と タイトルを探す
+                                const parentText = parent.textContent || '';
+                                const priceMatch = parentText.match(/¥|￥/);
+                                const titleEl = parent.querySelector('h1, h2, h3, [class*="title"]');
+
+                                if (priceMatch && titleEl) {
+                                    const title = titleEl.textContent.trim();
+                                    if (title.length > 3 && !items.find(i => i.title === title)) {
+                                        const priceText = parentText.split(/\n/).find(line => /¥|￥/.test(line));
+                                        if (priceText) {
+                                            items.push({
+                                                title: title,
+                                                price: priceText.trim(),
+                                                url: href
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+
                     return items.slice(0, 10);
                     """
                     result = driver.execute_script(js_code)
