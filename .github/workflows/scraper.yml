@@ -27,7 +27,7 @@ jobs:
       - name: Scrape and update
         run: python update_listings.py
 
-      - name: Debug: Test scrape
+      - name: "Debug: Test scrape"
         run: python test_scrape.py
 
       - name: Send to Discord
