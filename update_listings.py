@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""PayPay Flea Market - JSON-LD スキーマから価格取得"""
+"""PayPay Flea Market - Google 検索から商品ページへのリンク取得"""
 
 import json
 import re
 import sys
-import time
-from urllib.parse import quote
+import asyncio
+from urllib.parse import quote, urlparse
 
-import requests
+from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 
 CARD_KEYWORDS = [
@@ -38,71 +38,94 @@ EXCLUDE_KEYWORDS = [
 ]
 
 TOP_N = 3
-FALLBACK_DATA = {}
 
-def scrape_card(keyword: str) -> list:
-    """PayPay から JSON-LD スキーマを使って価格取得"""
+async def get_paypal_links_from_google(page, keyword: str) -> list:
+    """Google 検索から PayPay フリマへのリンクを取得"""
     try:
-        url = f"https://paypayfleamarket.yahoo.co.jp/search?keyword={quote(keyword)}"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        search_url = f"https://www.google.com/search?q=site:paypayfleamarket.yahoo.co.jp {quote(keyword)}"
+        print(f"Searching Google for {keyword}...", file=sys.stderr)
 
-        print(f"Fetching {keyword}...", file=sys.stderr)
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
+        await page.goto(search_url, wait_until="domcontentloaded", timeout=15000)
+        await page.wait_for_timeout(1000)
 
-        html_text = response.text
-        json_ld_match = re.search(r'<script type="application/ld\+json">([^<]+)</script>', html_text)
+        html = await page.content()
+        soup = BeautifulSoup(html, "html.parser")
 
-        if not json_ld_match:
-            print(f"JSON-LD not found for {keyword}", file=sys.stderr)
+        links = []
+        for link in soup.find_all("a", href=True):
+            href = link.get("href", "")
+
+            # PayPay フリマのリンクか確認
+            if "paypayfleamarket.yahoo.co.jp" in href and "/item/" in href:
+                # Google の URL リダイレクトを除去
+                if href.startswith("/url?q="):
+                    href = href.split("/url?q=")[1].split("&")[0]
+
+                links.append(href)
+
+        print(f"Found {len(links)} PayPay links", file=sys.stderr)
+        return links[:10]  # 最初の 10 件を取得
+
+    except Exception as e:
+        print(f"Google search error: {e}", file=sys.stderr)
+        return []
+
+async def scrape_item_page(page, item_url: str) -> dict:
+    """商品ページから価格と情報を抽出"""
+    try:
+        await page.goto(item_url, wait_until="domcontentloaded", timeout=15000)
+        await page.wait_for_timeout(1000)
+
+        html = await page.content()
+        soup = BeautifulSoup(html, "html.parser")
+
+        # タイトルを抽出
+        title_elem = soup.find("h1")
+        title = title_elem.get_text(strip=True) if title_elem else "Unknown"
+
+        # 価格を抽出（複数のパターンを試す）
+        price = None
+        for pattern in [r"¥([\d,]+)", r"([0-9,]+)円"]:
+            match = re.search(pattern, html)
+            if match:
+                price = int(match.group(1).replace(",", ""))
+                break
+
+        if not price:
+            return None
+
+        # EXCLUDE_KEYWORDS で除外
+        if any(kw in title for kw in EXCLUDE_KEYWORDS):
+            return None
+
+        return {
+            "title": title[:50],
+            "price": price,
+            "url": item_url,
+        }
+
+    except Exception as e:
+        print(f"Item page error: {e}", file=sys.stderr)
+        return None
+
+async def scrape_card(page, keyword: str) -> list:
+    """カードの価格情報を取得"""
+    try:
+        # Google 検索から PayPay フリマのリンクを取得
+        links = await get_paypal_links_from_google(page, keyword)
+
+        if not links:
+            print(f"No PayPay links found for {keyword}", file=sys.stderr)
             return []
-
-        try:
-            schemas = json.loads(json_ld_match.group(1))
-            if not isinstance(schemas, list):
-                schemas = [schemas]
-        except json.JSONDecodeError as e:
-            print(f"JSON parse error: {e}", file=sys.stderr)
-            return []
-
-        item_urls = []
-        for schema in schemas:
-            if schema.get("@type") == "ItemList" and "itemListElement" in schema:
-                for item in schema["itemListElement"]:
-                    if "url" in item:
-                        item_urls.append(item["url"])
-
-        print(f"Found {len(item_urls)} URLs from JSON-LD", file=sys.stderr)
 
         results = []
-        for item_url in item_urls[:10]:
+        for url in links:
             if len(results) >= TOP_N:
                 break
 
-            try:
-                item_response = requests.get(item_url, headers=headers, timeout=15)
-                item_soup = BeautifulSoup(item_response.content, "html.parser")
-
-                title_tag = item_soup.find("h1")
-                title = title_tag.get_text(strip=True) if title_tag else "Unknown"
-
-                price_match = re.search(r"¥([\d,]+)", item_soup.get_text())
-                if not price_match:
-                    continue
-
-                if any(kw in title for kw in EXCLUDE_KEYWORDS):
-                    continue
-
-                price = int(price_match.group(1).replace(",", ""))
-                results.append({
-                    "title": title[:50],
-                    "price": price,
-                    "url": item_url,
-                })
-
-            except Exception as e:
-                print(f"Error processing {item_url}: {e}", file=sys.stderr)
-                continue
+            item = await scrape_item_page(page, url)
+            if item:
+                results.append(item)
 
         print(f"✓ {keyword}: {len(results)} items", file=sys.stderr)
         return results
@@ -111,24 +134,34 @@ def scrape_card(keyword: str) -> list:
         print(f"Error ({keyword}): {e}", file=sys.stderr)
         return []
 
-def main():
-    data = {}
-    success_count = 0
+async def main():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True, args=[
+            "--disable-blink-features=AutomationControlled",
+            "--no-sandbox",
+        ])
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        )
+        page = await context.new_page()
 
-    for i, keyword in enumerate(CARD_KEYWORDS):
-        print(f"Processing ({i+1}/{len(CARD_KEYWORDS)}): {keyword}", file=sys.stderr)
-        results = scrape_card(keyword)
-        if results:
-            data[keyword] = results
-            success_count += 1
-        else:
-            data[keyword] = FALLBACK_DATA.get(keyword, [])
-        time.sleep(1)
+        data = {}
+        success_count = 0
 
-    with open("listings.json", "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        for i, keyword in enumerate(CARD_KEYWORDS):
+            print(f"Processing ({i+1}/{len(CARD_KEYWORDS)}): {keyword}", file=sys.stderr)
+            results = await scrape_card(page, keyword)
+            if results:
+                data[keyword] = results
+                success_count += 1
+            await page.wait_for_timeout(2000)
 
-    print(f"OK: {success_count}/{len(CARD_KEYWORDS)} scraped", file=sys.stderr)
+        await browser.close()
+
+        with open("listings.json", "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        print(f"OK: {success_count}/{len(CARD_KEYWORDS)} scraped", file=sys.stderr)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
