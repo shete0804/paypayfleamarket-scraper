@@ -481,7 +481,7 @@ def fetch_all() -> tuple[dict[str, list[Listing]], dict[str, str]]:
                     items = listings_data[keyword]
                     results[keyword] = [
                         Listing(
-                            title=item.get("title", ""),
+                            card=item.get("title", ""),
                             price=item.get("price", 0),
                             url=item.get("url", "")
                         )
