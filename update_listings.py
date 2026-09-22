@@ -48,22 +48,29 @@ def scrape_card(keyword: str) -> list:
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.content, "html.parser")
 
+        items = soup.find_all("a", href=re.compile(r"/item/"))
+        print(f"DEBUG: 見つかった <a> タグ数: {len(items)}", file=sys.stderr)
+
         results = []
-        for item in soup.find_all("a", href=re.compile(r"/item/")):
+        for i, item in enumerate(items):
             if len(results) >= TOP_N:
                 break
 
             text = item.get_text(strip=True)
+            print(f"DEBUG: アイテム {i+1}: {text[:60]}", file=sys.stderr)
 
             # 除外キーワード判定
             if any(kw in text.lower() for kw in EXCLUDE_KEYWORDS):
+                print(f"DEBUG:   → 除外キーワード検出", file=sys.stderr)
                 continue
 
             # 価格を抽出
             price_match = re.search(r"¥([\d,]+)", text)
             if not price_match:
+                print(f"DEBUG:   → 価格パターン不一致", file=sys.stderr)
                 continue
 
+            print(f"DEBUG:   → 価格マッチ成功", file=sys.stderr)
             price = int(price_match.group(1).replace(",", ""))
             href = item.get("href", "")
 
