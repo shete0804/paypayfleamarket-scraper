@@ -76,6 +76,7 @@ try:
 except Exception as patch_error:
     print(f"Could not patch DNS: {patch_error}", file=sys.stderr)
 
+# 修正: 登録済みカード 2 つのみに限定（2026-09-22）
 CARD_KEYWORDS: list[str] = [
     "メガルカリオex MUR メガブレイブ",
     "リーリエの決心 SAR メガブレイブ",
