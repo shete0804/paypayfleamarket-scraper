@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""PayPay フリマ スクレイパー（Apify を使用）"""
+"""PayPay フリマ スクレイパー（requests + HTML 直接解析）"""
 
-import json
 import os
+import re
 import sys
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
+import time
 
 import requests
+from bs4 import BeautifulSoup
 
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
-APIFY_TOKEN = os.environ.get("APIFY_TOKEN", "").strip()
 
 CARD_KEYWORDS = [
     "メガルカリオex MUR メガブレイブ",
@@ -41,6 +43,10 @@ EXCLUDE_KEYWORDS = [
 
 TOP_N = 3
 JST = timezone(timedelta(hours=9))
+MAX_RETRIES = 3
+RETRY_WAIT = 3
+
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
 def is_single_card(title: str) -> bool:
     """タイトルからシングルカードかどうか判定"""
@@ -50,55 +56,84 @@ def is_single_card(title: str) -> bool:
             return False
     return True
 
-def call_apify(keyword: str) -> list:
-    """Apify で PayPay フリマを検索"""
-    if not APIFY_TOKEN:
-        print(f"警告: APIFY_TOKEN が設定されていません", file=sys.stderr)
-        return []
+def scrape_card(keyword: str) -> list:
+    """1 カード分を requests で取得"""
+    url = f"https://paypayfleamarket.yahoo.co.jp/search/{quote(keyword)}"
 
-    try:
-        url = "https://api.apify.com/v2/acts/youfuxu~paypay-flea-japan-scraper/run-sync-get-dataset-items"
+    for attempt in range(MAX_RETRIES):
+        try:
+            headers = {
+                "User-Agent": USER_AGENT,
+                "Accept-Language": "ja-JP,ja;q=0.9",
+            }
 
-        params = {
-            "token": APIFY_TOKEN,
-        }
+            response = requests.get(url, headers=headers, timeout=15)
+            response.raise_for_status()
 
-        payload = {
-            "searchKeywords": [keyword],
-            "maxItems": 10,
-        }
+            soup = BeautifulSoup(response.content, "html.parser")
 
-        response = requests.post(url, json=payload, params=params, timeout=60)
-        response.raise_for_status()
+            results = []
 
-        items = response.json() if isinstance(response.json(), list) else []
+            # 複数のセレクタを試す
+            for item_elem in soup.find_all("a", href=re.compile(r"/item/|フリマ")):
+                if len(results) >= TOP_N:
+                    break
 
-        results = []
-        for item in items[:TOP_N]:
-            if not is_single_card(item.get("title", "")):
-                continue
+                href = item_elem.get("href", "")
+                if not href or "/item/" not in href:
+                    continue
 
-            price = item.get("price")
-            if not price:
-                continue
+                # タイトルと価格を抽出
+                text = item_elem.get_text(separator=" ", strip=True)
 
-            results.append({
-                "title": item.get("title", ""),
-                "price": int(price) if isinstance(price, (int, float)) else 0,
-                "url": item.get("url", ""),
-            })
+                if not text:
+                    continue
 
-        return results[:TOP_N]
-    except Exception as e:
-        print(f"Apify エラー ({keyword}): {type(e).__name__}: {e}", file=sys.stderr)
-        return []
+                # シングルカード判定
+                if not is_single_card(text):
+                    continue
+
+                # 価格を抽出（¥XXXX 形式）
+                price_match = re.search(r"¥([\d,]+)", text)
+                if not price_match:
+                    continue
+
+                try:
+                    price = int(price_match.group(1).replace(",", ""))
+                except ValueError:
+                    continue
+
+                # URL を完成させる
+                if not href.startswith("http"):
+                    href = f"https://paypayfleamarket.yahoo.co.jp{href}"
+
+                results.append({
+                    "title": text[:50],  # タイトルを最初の 50 文字に制限
+                    "price": price,
+                    "url": href,
+                })
+
+            if results:
+                return results
+
+        except requests.exceptions.RequestException as e:
+            print(f"[retry {attempt + 1}/{MAX_RETRIES}] {keyword}: {type(e).__name__}", file=sys.stderr)
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(RETRY_WAIT)
+        except Exception as e:
+            print(f"[retry {attempt + 1}/{MAX_RETRIES}] {keyword}: {type(e).__name__}: {e}", file=sys.stderr)
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(RETRY_WAIT)
+
+    return []
 
 def fetch_all() -> dict:
     """全カードを取得"""
     results = {}
-    for keyword in CARD_KEYWORDS:
-        print(f"取得中: {keyword}", file=sys.stderr)
-        results[keyword] = call_apify(keyword)
+    for i, keyword in enumerate(CARD_KEYWORDS):
+        print(f"取得中 ({i+1}/{len(CARD_KEYWORDS)}): {keyword}", file=sys.stderr)
+        results[keyword] = scrape_card(keyword)
+        time.sleep(1)  # サーバー負荷軽減
     return results
 
 def fmt_price(price):
@@ -119,21 +154,18 @@ def send_discord(payload):
         print(f"Discord error: {e}", file=sys.stderr)
 
 def main():
-    if not APIFY_TOKEN:
-        print("環境変数 APIFY_TOKEN が必要です", file=sys.stderr)
-        return 1
-
     if not DISCORD_WEBHOOK_URL:
         print("環境変数 DISCORD_WEBHOOK_URL が必要です", file=sys.stderr)
         return 1
 
+    print("PayPay フリマをスクレイピング中...", file=sys.stderr)
     results = fetch_all()
 
     fields = []
     for keyword in CARD_KEYWORDS:
         items = results.get(keyword, [])
         if items:
-            value = "\n".join(f"[{fmt_price(item['price'])}]({item['url']})" for item in items)
+            value = "\n".join(f"[{fmt_price(item['price'])}]({item['url']})" for item in items[:TOP_N])
         else:
             value = "登録なし"
         fields.append({"name": keyword, "value": value, "inline": False})
