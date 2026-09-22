@@ -1,39 +1,38 @@
 #!/usr/bin/env python3
 """
-PayPay フリマ × メルカリ 値段差比較システム
-===========================================
+PayPay フリマ スクレイパー
+========================
 
-Apify API を使用して PayPay Flea Market の実数値を取得し、
-メルカリの価格との差分を Discord に通知する。
+Playwright を使用して PayPay Flea Market の実数値を取得し、
+Discord に通知する。
 
 GitHub Actions から 6 時間ごとに実行される想定。
 
 必要な環境変数:
     DISCORD_WEBHOOK_URL   Discord Incoming Webhook の URL
-    APIFY_API_TOKEN       Apify API トークン（PayPay データ取得用）
 
 必要なライブラリ:
     requests              HTTP リクエスト送信
-    apify-client          Apify API クライアント
+    playwright            Playwright for Python
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import traceback
 from datetime import datetime, timedelta, timezone
 
 import requests
-from apify_client import ApifyClient
+from playwright.sync_api import sync_playwright
 
 # ---------------------------------------------------------------------------
 # 設定
 # ---------------------------------------------------------------------------
 
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
-APIFY_API_TOKEN = os.environ.get("APIFY_API_TOKEN", "").strip()
 
 CARD_KEYWORDS: list[str] = [
     "メガルカリオex MUR メガブレイブ",
@@ -59,6 +58,11 @@ CARD_KEYWORDS: list[str] = [
 TOP_N = 3
 
 JST = timezone(timedelta(hours=9))
+
+NAV_TIMEOUT_MS = 60000
+RETRY_WAIT_SEC = 2
+MAX_RETRIES = 2
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
 EXCLUDE_KEYWORDS: set[str] = {
     "セット",
@@ -107,97 +111,133 @@ def is_single_card(title: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def fetch_all() -> tuple[dict[str, list[Listing]], dict[str, str]]:
-    results: dict[str, list[Listing]] = {}
-    errors: dict[str, str] = {}
-
-    # Apify トークンがない場合は JSON フォールバック
-    if not APIFY_API_TOKEN:
-        print("警告: APIFY_API_TOKEN が未設定。JSON フォールバックモードで実行", file=sys.stderr)
-        return _fetch_from_json()
-
-    # Apify API で PayPay Flea Market からデータ取得
-    client = ApifyClient(token=APIFY_API_TOKEN)
-
-    for keyword in CARD_KEYWORDS:
-        try:
-            print(f"取得中: {keyword}", file=sys.stderr)
-
-            # Apify Actor を実行（jungle_synthesizer のスクレーパーを使用）
-            run = client.actor("jungle_synthesizer/paypay-flea-market-japan-listings-scraper").call(
-                {"query": keyword, "maxItems": TOP_N}
-            )
-
-            # 結果データを Listing に変換
-            items_data = run.get("items", []) or []
-            listings = []
-
-            for item in items_data[:TOP_N]:
-                try:
-                    # Apify からのレスポンス形式に対応
-                    price_str = str(item.get("price", "0")).replace("¥", "").replace(",", "").strip()
-                    price = int(float(price_str)) if price_str.isdigit() else 0
-
-                    if price > 0 and is_single_card(item.get("title", "")):
-                        listings.append(Listing(
-                            card=keyword,
-                            price=price,
-                            url=item.get("url", "")
-                        ))
-                except (ValueError, KeyError, TypeError) as e:
-                    print(f"  アイテムパース失敗: {item} - {e}", file=sys.stderr)
-                    continue
-
-            if listings:
-                results[keyword] = listings
-                print(f"{keyword}: {len(listings)}件取得", file=sys.stderr)
-            else:
-                errors[keyword] = "Apify: 該当商品なし"
-                print(f"{keyword}: 該当商品なし", file=sys.stderr)
-
-        except Exception as e:
-            error_msg = f"Apify API エラー: {type(e).__name__}: {str(e)[:100]}"
-            errors[keyword] = error_msg
-            print(error_msg, file=sys.stderr)
-
-    return results, errors
+def build_search_url(keyword: str) -> str:
+    """PayPay Flea Market の検索 URL を構築"""
+    escaped = keyword.replace(" ", "%20")
+    return f"https://paypayfleamarket.yahoo.co.jp/search/{escaped}"
 
 
-def _fetch_from_json() -> tuple[dict[str, list[Listing]], dict[str, str]]:
-    """JSON フォールバック実装（Apify トークン未設定時）"""
-    results: dict[str, list[Listing]] = {}
-    errors: dict[str, str] = {}
+def extract_price(text: str) -> int:
+    """テキストから価格を抽出（¥XXXXX 形式）"""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in lines:
+        match = re.search(r"(\d+(?:,\d+)*)\s*円", line)
+        if match:
+            price_str = match.group(1).replace(",", "")
+            try:
+                return int(price_str)
+            except ValueError:
+                continue
+    return 0
 
-    import os as _os
-    _listings_file = "listings.json"
+
+def parse_listings(page, keyword: str) -> list[Listing]:
+    """PayPay ページから商品リスティングを抽出"""
+    results = []
+    processed = 0
 
     try:
-        if _os.path.exists(_listings_file):
-            with open(_listings_file, "r", encoding="utf-8") as f:
-                listings_data = json.load(f)
+        links = page.locator('a[href*="/item/"]')
+        count = links.count()
+        print(f"  見つかったリンク数: {count}", file=sys.stderr)
 
-            for keyword in CARD_KEYWORDS:
-                if keyword in listings_data:
-                    items = listings_data[keyword]
-                    results[keyword] = [
-                        Listing(
-                            card=item.get("title", ""),
-                            price=item.get("price", 0),
-                            url=item.get("url", "")
-                        )
-                        for item in items
-                    ]
-                    print(f"{keyword}: {len(results[keyword])}件取得（JSON）", file=sys.stderr)
+        for index in range(count):
+            if processed >= TOP_N:
+                break
+
+            try:
+                link = links.nth(index)
+                href = link.get_attribute("href") or ""
+
+                # タイトルを取得（img の alt 属性）
+                img = link.locator("img[alt]").first
+                title = (img.get_attribute("alt") or "").strip()
+
+                if not title or not is_single_card(title):
+                    processed += 1
+                    continue
+
+                # URL を絶対 URL に変換
+                if href.startswith("http"):
+                    url = href
                 else:
-                    print(f"{keyword}: JSON に未登録", file=sys.stderr)
-        else:
-            print(f"listings.json が見つかりません", file=sys.stderr)
-            for keyword in CARD_KEYWORDS:
-                errors[keyword] = "listings.json が見つかりません"
+                    url = f"https://paypayfleamarket.yahoo.co.jp{href}"
+
+                # 価格を取得
+                price_text = link.inner_text(timeout=5000)
+                price = extract_price(price_text)
+
+                if price > 0:
+                    results.append(Listing(card=keyword, price=price, url=url))
+                    processed += 1
+
+            except Exception as e:
+                print(f"  アイテムパース失敗: {e}", file=sys.stderr)
+                continue
+
     except Exception as e:
-        print(f"JSON 読み込みエラー: {e}", file=sys.stderr)
-        for keyword in CARD_KEYWORDS:
-            errors[keyword] = f"JSON 読み込みエラー: {str(e)}"
+        print(f"  ページパース失敗: {e}", file=sys.stderr)
+
+    return results[:TOP_N]
+
+
+def scrape_card(page, keyword: str) -> list[Listing]:
+    """1 カード分を最大 MAX_RETRIES 回リトライして取得する"""
+    last_err: Exception | None = None
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            page.goto(
+                build_search_url(keyword),
+                wait_until="domcontentloaded",
+                timeout=NAV_TIMEOUT_MS,
+            )
+            page.wait_for_timeout(2000)
+
+            return parse_listings(page, keyword)
+
+        except Exception as err:
+            last_err = err
+            print(f"[retry {attempt}/{MAX_RETRIES}] {keyword}: {err}", file=sys.stderr)
+            if attempt < MAX_RETRIES:
+                import time
+                time.sleep(RETRY_WAIT_SEC)
+
+    raise RuntimeError(
+        f"{keyword!r} を {MAX_RETRIES} 回試行して取得失敗: {last_err}"
+    )
+
+
+def fetch_all() -> tuple[dict[str, list[Listing]], dict[str, str]]:
+    """全カードを順に Playwright で取得する"""
+    results: dict[str, list[Listing]] = {}
+    errors: dict[str, str] = {}
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
+        )
+        context = browser.new_context(
+            user_agent=USER_AGENT,
+            locale="ja-JP",
+            timezone_id="Asia/Tokyo",
+        )
+        page = context.new_page()
+        page.set_default_timeout(NAV_TIMEOUT_MS)
+
+        try:
+            for keyword in CARD_KEYWORDS:
+                try:
+                    print(f"取得中: {keyword}", file=sys.stderr)
+                    results[keyword] = scrape_card(page, keyword)
+                    print(f"  {len(results[keyword])}件取得", file=sys.stderr)
+                except Exception as err:
+                    error_msg = f"取得失敗: {type(err).__name__}: {str(err)[:100]}"
+                    errors[keyword] = error_msg
+                    print(f"  {error_msg}", file=sys.stderr)
+        finally:
+            browser.close()
 
     return results, errors
 
@@ -219,22 +259,8 @@ def _send(payload: dict) -> None:
     if not DISCORD_WEBHOOK_URL:
         print("DISCORD_WEBHOOK_URL 未設定のため送信をスキップ", file=sys.stderr)
         return
-    print(f"DEBUG: Sending payload to Discord webhook...", file=sys.stderr)
-    print(f"DEBUG: Webhook URL: {DISCORD_WEBHOOK_URL[:80]}...", file=sys.stderr)
-    try:
-        resp = requests.post(
-                        DISCORD_WEBHOOK_URL,
-                        data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
-                        headers={"Content-Type": "application/json; charset=utf-8"},
-                        timeout=15
-        )
-        print(f"DEBUG: Discord webhook response: {resp.status_code}", file=sys.stderr)
-        print(f"DEBUG: Response text: {resp.text[:200]}", file=sys.stderr)
-        resp.raise_for_status()
-        print(f"DEBUG: Discord webhook sent successfully", file=sys.stderr)
-    except Exception as e:
-        print(f"DEBUG: Discord webhook error: {type(e).__name__}: {str(e)}", file=sys.stderr)
-        raise
+    resp = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=15)
+    resp.raise_for_status()
 
 
 def post_report(results: dict[str, list[Listing]], errors: dict[str, str]) -> None:
@@ -275,21 +301,13 @@ def post_failure(title: str, detail: str) -> None:
 
 
 def main() -> int:
-    print(f"DEBUG: DISCORD_WEBHOOK_URL={DISCORD_WEBHOOK_URL[:50]}..." if DISCORD_WEBHOOK_URL else "DEBUG: DISCORD_WEBHOOK_URL not set", file=sys.stderr)
-
     if not DISCORD_WEBHOOK_URL:
         print("環境変数 DISCORD_WEBHOOK_URL が必要です", file=sys.stderr)
         return 1
 
     try:
-        print("DEBUG: Starting fetch_all()", file=sys.stderr)
         results, errors = fetch_all()
-        print(f"DEBUG: fetch_all() completed. results: {len(results)} items, errors: {len(errors)} items", file=sys.stderr)
-        if errors:
-            print(f"DEBUG: Errors encountered: {errors}", file=sys.stderr)
-    except Exception as e:
-        print(f"DEBUG: Exception in fetch_all(): {type(e).__name__}: {e}", file=sys.stderr)
-        print(f"DEBUG: Traceback: {traceback.format_exc()}", file=sys.stderr)
+    except Exception:
         post_failure("スクレイピング失敗", traceback.format_exc())
         return 1
 
