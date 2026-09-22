@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""PayPay フリマから最新値段を自動取得して listings.json を更新"""
+"""PayPay フリマから実数値を取得（Playwright で JavaScript レンダリング対応）"""
 
 import json
 import re
 import sys
-import time
+import asyncio
 from urllib.parse import quote
 
-import requests
 from bs4 import BeautifulSoup
+from playwright.async_api import async_playwright
 
 CARD_KEYWORDS = [
     "メガルカリオex MUR メガブレイブ",
@@ -21,7 +21,7 @@ CARD_KEYWORDS = [
     "ピカチュウex SAR MEGAドリームex",
     "ロケット団のミュウツーex SAR MEGAドリームex",
     "メガゲンガーex SAR MEGAドリームex",
-    "メガカイリューex SAR MEGAドリームex",
+    "メガカイリューex SAR MEガドリームex",
     "メガジガルデex MUR ムニキスゼロ",
     "ニャースex SAR ムニキスゼロ",
     "メイのはげまし SAR ムニキスゼロ",
@@ -39,47 +39,46 @@ EXCLUDE_KEYWORDS = [
 
 TOP_N = 3
 
-def scrape_card(keyword: str) -> list:
-    """PayPay から最新値段を取得（シンプルな URL 抽出）"""
+async def scrape_card(page, keyword: str) -> list:
+    """Playwright で JavaScript レンダリング後に価格を取得"""
     try:
         url = f"https://paypayfleamarket.yahoo.co.jp/search/{quote(keyword)}"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        print(f"検索中: {keyword}", file=sys.stderr)
 
-        response = requests.get(url, headers=headers, timeout=10)
-        print(f"検索中: {keyword} - Status {response.status_code}", file=sys.stderr)
+        # ページロード
+        await page.goto(url, wait_until="networkidle", timeout=30000)
 
-        html_text = response.content.decode('utf-8', errors='ignore')
-
-        # /item/ パターンのURLを抽出
-        item_links = re.findall(r'href="(/item/\w+)"', html_text)
-        print(f"DEBUG: 見つかった /item/ リンク: {len(item_links)}", file=sys.stderr)
-
-        if not item_links:
-            # 別パターン: シングルクォート
-            item_links = re.findall(r"href='(/item/\w+)'", html_text)
-            print(f"DEBUG: シングルクォート検索: {len(item_links)}", file=sys.stderr)
+        # 商品リンク取得
+        items = await page.locator('a[href*="/item/"]').all()
+        print(f"見つかった商品: {len(items)} 件", file=sys.stderr)
 
         results = []
-        for item_path in item_links[:10]:  # 最初の10個を試す
+        for item in items[:10]:  # 最初の 10 個を試す
             if len(results) >= TOP_N:
                 break
 
             try:
-                item_url = f"https://paypayfleamarket.yahoo.co.jp{item_path}"
-                item_response = requests.get(item_url, headers=headers, timeout=10)
-
-                if item_response.status_code != 200:
+                # アイテムページへのリンク取得
+                href = await item.get_attribute("href")
+                if not href or "/item/" not in href:
                     continue
 
-                item_soup = BeautifulSoup(item_response.content, "html.parser")
+                item_url = f"https://paypayfleamarket.yahoo.co.jp{href}"
+
+                # アイテムページを開く
+                await page.goto(item_url, wait_until="networkidle", timeout=30000)
+
+                # ページコンテンツ取得
+                content = await page.content()
+                soup = BeautifulSoup(content, "html.parser")
 
                 # タイトル取得
-                title_tag = item_soup.find("h1")
+                title_tag = soup.find("h1")
                 if not title_tag:
                     continue
                 title = title_tag.get_text(strip=True)
 
-                # キーワード確認（大まかに）
+                # キーワード確認
                 first_word = keyword.split()[0]
                 if first_word not in title:
                     continue
@@ -89,7 +88,7 @@ def scrape_card(keyword: str) -> list:
                     continue
 
                 # 価格取得
-                price_match = re.search(r"¥([\d,]+)", item_soup.get_text())
+                price_match = re.search(r"¥([\d,]+)", soup.get_text())
                 if not price_match:
                     continue
 
@@ -99,32 +98,37 @@ def scrape_card(keyword: str) -> list:
                     "price": price,
                     "url": item_url,
                 })
-                print(f"DEBUG: ✓ {title[:40]} - ¥{price}", file=sys.stderr)
+                print(f"✓ {title[:40]} - ¥{price}", file=sys.stderr)
 
             except Exception as e:
-                print(f"DEBUG: アイテム処理エラー: {e}", file=sys.stderr)
+                print(f"アイテム処理エラー: {e}", file=sys.stderr)
                 continue
 
-        print(f"最終結果: {keyword} - {len(results)}/{TOP_N} 件取得", file=sys.stderr)
+        print(f"最終: {keyword} - {len(results)}/{TOP_N} 件取得", file=sys.stderr)
         return results
 
     except Exception as e:
         print(f"エラー ({keyword}): {e}", file=sys.stderr)
         return []
 
-def update_listings():
-    """listings.json を最新値段で更新"""
-    data = {}
+async def main():
+    """Playwright ブラウザで全カード取得"""
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        page = await browser.new_page()
 
-    for i, keyword in enumerate(CARD_KEYWORDS):
-        data[keyword] = scrape_card(keyword)
-        time.sleep(0.5)
+        data = {}
+        for i, keyword in enumerate(CARD_KEYWORDS):
+            print(f"処理中 ({i+1}/{len(CARD_KEYWORDS)}): {keyword}", file=sys.stderr)
+            data[keyword] = await scrape_card(page, keyword)
 
-    # listings.json に保存
-    with open("listings.json", "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        await browser.close()
 
-    print("listings.json を更新しました", file=sys.stderr)
+        # listings.json に保存
+        with open("listings.json", "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        print("listings.json を更新しました", file=sys.stderr)
 
 if __name__ == "__main__":
-    update_listings()
+    asyncio.run(main())
