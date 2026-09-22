@@ -304,6 +304,9 @@ def search_card(keyword: str) -> list[Listing]:
                         break
                     else:
                         print(f"セレクタ試行: {selector} - 候補{len(candidates)}個だが有効なitem URLなし", file=sys.stderr)
+                        # 見つかった要素の詳細情報を出力
+                        for i, cand in enumerate(candidates[:3]):
+                            print(f"  [候補{i+1}] tag={cand.tag_name}, class={cand.get_attribute('class')}, href={cand.get_attribute('href')[:60] if cand.get_attribute('href') else 'N/A'}", file=sys.stderr)
                 except Exception as selector_error:
                     print(f"セレクタエラー: {selector} - {selector_error}", file=sys.stderr)
 
@@ -312,8 +315,13 @@ def search_card(keyword: str) -> list[Listing]:
                 # ページ内のすべてのリンクを列挙してデバッグ
                 all_links = driver.find_elements(By.TAG_NAME, "a")
                 print(f"ページ内の全リンク数: {len(all_links)}", file=sys.stderr)
-                print(f"最初の20個のリンク href: {[link.get_attribute('href')[:80] if link.get_attribute('href') else 'N/A' for link in all_links[:20]]}", file=sys.stderr)
-                print(f"ページソース先頭2000文字: {driver.page_source[:2000]}", file=sys.stderr)
+                print(f"最初の20個のリンク: ", file=sys.stderr)
+                for i, link in enumerate(all_links[:20]):
+                    print(f"  [{i+1}] tag={link.tag_name}, class={link.get_attribute('class')}, href={link.get_attribute('href')[:60] if link.get_attribute('href') else 'N/A'}, text={link.text[:30] if link.text else 'N/A'}", file=sys.stderr)
+                # ページの HTML 構造を出力（最初の 5000 文字）
+                print(f"=== ページソース先頭5000文字 ===", file=sys.stderr)
+                print(driver.page_source[:5000], file=sys.stderr)
+                print(f"=== ページソース終了 ===", file=sys.stderr)
                 return listings
 
             print(f"見つかった商品数: {len(product_links)}", file=sys.stderr)
