@@ -30,10 +30,12 @@ import requests
 
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
 
-# 修正: 登録済みカード 2 つのみに限定（2026-09-22）
 CARD_KEYWORDS: list[str] = [
     "メガルカリオex MUR メガブレイブ",
     "リーリエの決心 SAR メガブレイブ",
+    "メガゲッコウガex MUR ニンジャスピナー",
+    "メガボーマンダex DRR フェアリースターター",
+    "メガハッサムex MUR メタルシンフォニー",
 ]
 
 TOP_N = 3
