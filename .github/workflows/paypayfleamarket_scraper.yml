@@ -54,4 +54,12 @@ jobs:
           DISCORD_WEBHOOK_URL: https://discord.com/api/webhooks/1551714143482941500/U9H7uuATEotL7YP2W2U_YDkzrTmOSHsGFcJOwpdXKTR7wPc3Eq2JIcz04avdZbcWXpml
         run: python paypayfleamarket_scraper.py
 
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots
+          path: debug_output/
+          retention-days: 7
+
   # Trigger: Enforce Run #64 execution for improved selector matching and JS fallback (2026-09-22 08:13 UTC)

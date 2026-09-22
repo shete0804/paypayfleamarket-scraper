@@ -144,6 +144,10 @@ def search_card(keyword: str) -> list[Listing]:
     try:
         print(f"検索中: {keyword}", file=sys.stderr)
 
+        # Ensure debug output directory exists
+        debug_dir = "debug_output"
+        os.makedirs(debug_dir, exist_ok=True)
+
         import socket
         try:
             ip_addr = socket.gethostbyname("www.paypayfleamarket.yahoo.co.jp")
@@ -186,7 +190,7 @@ def search_card(keyword: str) -> list[Listing]:
 
             # ページスクリーンショット（デバッグ用）
             try:
-                screenshot_path = f"/tmp/paypay_search_{keyword.replace(' ', '_')}.png"
+                screenshot_path = os.path.join(debug_dir, f"paypay_search_{keyword.replace(' ', '_')}.png")
                 driver.save_screenshot(screenshot_path)
                 print(f"DEBUG: Screenshot saved to {screenshot_path}", file=sys.stderr)
             except Exception as e:
