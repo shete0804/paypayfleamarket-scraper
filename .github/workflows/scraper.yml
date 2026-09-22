@@ -24,21 +24,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Update listings from PayPay
-        run: |
-          echo "=== Updating PayPay listings ==="
-          python update_listings.py
-          echo "=== Listings updated ==="
-          if [ -f listings.json ]; then
-            echo "listings.json file size: $(wc -c < listings.json) bytes"
-          fi
+      - name: Scrape PayPay Flea Market
+        run: python update_listings.py
 
-      - name: Send to Discord
+      - name: Send Discord Notification
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python paypayfleamarket_scraper.py
 
-      - name: Commit and push updates
+      - name: Git Commit and Push
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
