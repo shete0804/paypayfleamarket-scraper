@@ -5,6 +5,8 @@ import json
 import sys
 import requests
 from bs4 import BeautifulSoup
+from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
 import re
 import signal
 
@@ -13,7 +15,7 @@ def timeout_handler(signum, frame):
     raise TimeoutError("Scraping timeout exceeded")
 
 signal.signal(signal.SIGALRM, timeout_handler)
-signal.alarm(30)  # 30秒タイムアウト
+signal.alarm(60)  # 60秒タイムアウト
 
 CARD_KEYWORDS = [
     "メガルカリオex MUR メガブレイブ",
@@ -131,38 +133,68 @@ FALLBACK_DATA = {
 }
 
 def scrape_prices():
-    """Attempt to scrape real prices from PayPay Flea Market"""
+    """Attempt to scrape real prices from PayPay Flea Market with retries"""
     try:
         print("Attempting to scrape PayPay prices...", file=sys.stderr)
 
+        # Setup retry strategy
+        session = requests.Session()
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET"]
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+
+        # Multiple User-Agent patterns
+        user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+        ]
+
         scraped_data = {}
-        for keyword in CARD_KEYWORDS[:2]:  # Test with first 2 cards only
-            url = f"https://www.paypayfleamarket.yahoo.co.jp/search?keyword={keyword}"
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        success_count = 0
 
-            response = requests.get(url, headers=headers, timeout=5)
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.content, "html.parser")
-                items = []
+        for idx, keyword in enumerate(CARD_KEYWORDS):
+            try:
+                url = f"https://www.paypayfleamarket.yahoo.co.jp/search?keyword={keyword}"
+                headers = {"User-Agent": user_agents[idx % len(user_agents)]}
 
-                # Try to extract items (simplified - real selectors may vary)
-                price_elements = soup.find_all(class_=lambda x: x and ("price" in x.lower() or "amount" in x.lower()))
+                response = session.get(url, headers=headers, timeout=10)
+                if response.status_code == 200:
+                    soup = BeautifulSoup(response.content, "html.parser")
+                    items = []
 
-                if price_elements:
-                    print(f"Found {len(price_elements)} price elements for {keyword}", file=sys.stderr)
-                    # Parse prices (simplified)
-                    for elem in price_elements[:3]:
-                        items.append({
-                            "title": keyword,
-                            "price": int("".join(filter(str.isdigit, elem.text[:20]))) or 0,
-                            "url": url
-                        })
+                    # Try multiple selectors
+                    price_elements = soup.find_all(class_=lambda x: x and ("price" in x.lower() or "amount" in x.lower()))
 
-                if items:
-                    scraped_data[keyword] = items
+                    if price_elements:
+                        for elem in price_elements[:3]:
+                            try:
+                                price_text = "".join(filter(str.isdigit, elem.text[:20]))
+                                if price_text:
+                                    items.append({
+                                        "title": keyword,
+                                        "price": int(price_text),
+                                        "url": url
+                                    })
+                            except (ValueError, IndexError):
+                                pass
 
-        if scraped_data:
-            print("SUCCESS: Scraped real prices!", file=sys.stderr)
+                    if items:
+                        scraped_data[keyword] = items
+                        success_count += 1
+
+            except Exception as e:
+                print(f"Error scraping {keyword}: {e}", file=sys.stderr)
+                continue
+
+        if success_count > 0:
+            print(f"SUCCESS: Scraped {success_count} cards with real prices!", file=sys.stderr)
             return scraped_data
         else:
             print("FAILED: No prices found - using fallback data", file=sys.stderr)
