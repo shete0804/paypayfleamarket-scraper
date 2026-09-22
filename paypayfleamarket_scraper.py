@@ -241,6 +241,7 @@ def search_card(keyword: str) -> list[Listing]:
                 # DOM 全体をスキャンしてテキストを取得
                 page_text = driver.execute_script("return document.body.innerText || ''")
                 print(f"ページテキスト取得: {len(page_text)} 文字", file=sys.stderr)
+                print(f"ページテキスト先頭 500 文字: {page_text[:500]}", file=sys.stderr)
 
                 # 正規表現で商品名と価格を抽出
                 # 商品名：keyword を含む 5 文字以上のテキスト
@@ -269,7 +270,8 @@ def search_card(keyword: str) -> list[Listing]:
                                 break
 
                 if not title:
-                    print(f"商品名が取得できません", file=sys.stderr)
+                    print(f"商品名が取得できません: keyword='{keyword}'", file=sys.stderr)
+                    print(f"最初の 10 行: {lines[:10]}", file=sys.stderr)
                     return listings
 
                 print(f"商品名: {title}", file=sys.stderr)
