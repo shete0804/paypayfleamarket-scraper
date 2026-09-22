@@ -25,7 +25,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Scrape PayPay Flea Market
-        run: python update_listings.py
+        run: python test_workflow.py
 
       - name: Send Discord Notification
         env:
