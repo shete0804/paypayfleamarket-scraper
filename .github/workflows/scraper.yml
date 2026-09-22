@@ -20,9 +20,10 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install -r requirements.txt
 
       - name: Run scraper
         env:
           DISCORD_WEBHOOK_URL: https://discord.com/api/webhooks/1551714143482941500/U9H7uuATEotL7YP2W2U_YDkzrTmOSHsGFcJOwpdXKTR7wPc3Eq2JIcz04avdZbcWXpml
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
         run: python paypayfleamarket_scraper.py
