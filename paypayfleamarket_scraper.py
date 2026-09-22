@@ -66,30 +66,40 @@ JST = timezone(timedelta(hours=9))
 
 def load_listings() -> tuple[dict[str, list[dict]], str | None]:
     """listings.json から出品情報を読み込む。失敗時はエラーメッセージを返す"""
+    import os.path
+
     try:
+        # Working directory を表示
+        cwd = os.getcwd()
+        print(f"CWD: {cwd}", file=sys.stderr)
+
         # 複数のパスを試す
         possible_paths = [
             LISTINGS_FILE,
             f"./{LISTINGS_FILE}",
             f"/github/workspace/{LISTINGS_FILE}",
+            os.path.join(cwd, LISTINGS_FILE),
         ]
 
         for path in possible_paths:
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                abs_path = os.path.abspath(path)
+                print(f"Try: {abs_path}", file=sys.stderr)
+                with open(abs_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    print(f"✓ {path} を読み込みました", file=sys.stderr)
+                    print(f"✓ Loaded: {abs_path}", file=sys.stderr)
                     return data, None
             except FileNotFoundError:
+                print(f"  NotFound", file=sys.stderr)
                 continue
             except json.JSONDecodeError as e:
-                return {}, f"{path} の JSON 解析に失敗: {e}"
+                return {}, f"JSON error in {abs_path}: {e}"
 
         # すべてのパスが失敗
-        return {}, f"{LISTINGS_FILE} が見つかりません（試行済みパス: {possible_paths}）"
+        return {}, f"NOT FOUND: {LISTINGS_FILE}"
 
     except Exception as e:
-        return {}, f"ファイル読み込みエラー: {e}"
+        return {}, f"Error: {e}"
 
 
 def fetch_all() -> tuple[dict[str, list[dict]], dict[str, str], str | None]:
