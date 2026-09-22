@@ -466,34 +466,38 @@ def fetch_all() -> tuple[dict[str, list[Listing]], dict[str, str]]:
     results: dict[str, list[Listing]] = {}
     errors: dict[str, str] = {}
 
-    # デバッグログをファイルに保存
+    # JSON ファイルから出品情報を読み込む
     import os as _os
-    _debug_dir = "debug_output"
-    if not _os.path.exists(_debug_dir):
-        _os.makedirs(_debug_dir)
-    _debug_file = _os.path.join(_debug_dir, f"debug_{datetime.now(JST).strftime('%Y%m%d_%H%M%S')}.log")
+    _listings_file = "listings.json"
 
-    # stderr をファイルにリダイレクト
-    _original_stderr = sys.stderr
     try:
-        _debug_fp = open(_debug_file, "w", encoding="utf-8")
-        sys.stderr = _debug_fp
-    except Exception as _e:
-        print(f"デバッグログファイル作成失敗: {_e}", file=_original_stderr)
-        _debug_fp = None
+        if _os.path.exists(_listings_file):
+            with open(_listings_file, "r", encoding="utf-8") as f:
+                listings_data = json.load(f)
 
-    for keyword in CARD_KEYWORDS:
-        try:
-            result = search_card(keyword)
-            results[keyword] = result
-        except Exception as e:
-            errors[keyword] = str(e)
-
-    # stderr をリストア
-    if _debug_fp:
-        sys.stderr = _original_stderr
-        _debug_fp.close()
-        print(f"デバッグログを保存しました: {_debug_file}", file=sys.stderr)
+            # JSON データを Listing オブジェクトに変換
+            for keyword in CARD_KEYWORDS:
+                if keyword in listings_data:
+                    items = listings_data[keyword]
+                    results[keyword] = [
+                        Listing(
+                            title=item.get("title", ""),
+                            price=item.get("price", 0),
+                            url=item.get("url", "")
+                        )
+                        for item in items
+                    ]
+                    print(f"{keyword}: {len(results[keyword])}件取得", file=sys.stderr)
+                else:
+                    print(f"{keyword}: JSON に未登録", file=sys.stderr)
+        else:
+            print(f"listings.json が見つかりません", file=sys.stderr)
+            for keyword in CARD_KEYWORDS:
+                errors[keyword] = "listings.json が見つかりません"
+    except Exception as e:
+        print(f"JSON 読み込みエラー: {e}", file=sys.stderr)
+        for keyword in CARD_KEYWORDS:
+            errors[keyword] = f"JSON 読み込みエラー: {str(e)}"
 
     return results, errors
 
