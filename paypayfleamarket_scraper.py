@@ -188,6 +188,7 @@ def main() -> int:
     except Exception:
         detail = traceback.format_exc()
         print(f"スクレイピング失敗: {detail}", file=sys.stderr)
+        print(detail)  # Also to stdout
         if DISCORD_WEBHOOK_URL:
             post_failure("スクレイピング失敗", detail)
         return 1
@@ -195,6 +196,7 @@ def main() -> int:
     # ファイル読み込みエラー
     if load_error:
         print(f"致命的エラー: {load_error}", file=sys.stderr)
+        print(f"ERROR: {load_error}")  # Also to stdout
         if DISCORD_WEBHOOK_URL:
             post_failure("listings.json 読み込みエラー", load_error)
         return 1
