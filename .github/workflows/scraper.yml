@@ -1,0 +1,28 @@
+name: PayPay Flea Market Scraper
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *'
+
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run scraper
+        env:
+          DISCORD_WEBHOOK_URL: https://discord.com/api/webhooks/1551714143482941500/U9H7uuATEotL7YP2W2U_YDkzrTmOSHsGFcJOwpdXKTR7wPc3Eq2JIcz04avdZbcWXpml
+        run: python paypayfleamarket_scraper.py
