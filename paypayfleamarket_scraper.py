@@ -190,7 +190,14 @@ def search_card(keyword: str) -> list[Listing]:
                     time.sleep(2)
 
             # 検索欄に「keyword + 新品」と入力
-            search_box = driver.find_element(By.NAME, "word")
+            try:
+                search_box = driver.find_element(By.NAME, "word")
+                print(f"検索欄が見つかりました", file=sys.stderr)
+            except:
+                print(f"検索欄が見つかりません。ページソース先頭5000文字を出力:", file=sys.stderr)
+                print(f"{driver.page_source[:5000]}", file=sys.stderr)
+                raise
+
             search_box.clear()
             search_box.send_keys(f"{keyword} 新品")
             print(f"検索欄に入力: {keyword} 新品", file=sys.stderr)
