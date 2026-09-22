@@ -247,6 +247,16 @@ def search_card(keyword: str) -> list[Listing]:
                 EC.url_contains("search")
             )
 
+            # 検索結果ページの確認
+            current_url = driver.current_url
+            print(f"検索後のURL: {current_url}", file=sys.stderr)
+
+            # ページが完全に読み込まれるまで待機
+            WebDriverWait(driver, 10).until(
+                lambda d: d.execute_script("return document.readyState") == "complete"
+            )
+            print(f"ページ完全読み込み完了", file=sys.stderr)
+
             # 「販売中のみ」フィルターをクリック（最初の検索結果から）
             try:
                 # 販売中チェックボックスを見つけてクリック
