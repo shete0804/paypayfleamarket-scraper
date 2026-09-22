@@ -111,10 +111,13 @@ def main():
             data[keyword] = results
             success_count += 1
 
-    with open("listings.json", "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-    print(f"OK: {success_count}/{len(CARD_KEYWORDS)} scraped", file=sys.stderr)
+    # スクレイピング結果がある場合のみ更新
+    if success_count > 0:
+        with open("listings.json", "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print(f"OK: {success_count}/{len(CARD_KEYWORDS)} scraped", file=sys.stderr)
+    else:
+        print(f"WARNING: No data scraped, keeping existing listings.json", file=sys.stderr)
 
 if __name__ == "__main__":
     main()
