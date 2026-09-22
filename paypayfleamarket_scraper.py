@@ -322,9 +322,9 @@ def search_card(keyword: str) -> list[Listing]:
                         print(f"TOP_N ({TOP_N} 件) に達したため終了", file=sys.stderr)
                         break
 
-            except Exception as e:
-                print(f"商品 {product_index + 1} 抽出エラー: {type(e).__name__}: {e}", file=sys.stderr)
-                continue  # 次の商品へ
+                except Exception as e:
+                    print(f"商品 {product_index + 1} 抽出エラー: {type(e).__name__}: {e}", file=sys.stderr)
+                    continue  # 次の商品へ
 
         finally:
             driver.quit()
