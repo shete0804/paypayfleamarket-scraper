@@ -40,69 +40,57 @@ EXCLUDE_KEYWORDS = [
 TOP_N = 3
 
 def scrape_card(keyword: str) -> list:
-    """PayPay から最新値段を取得（JSON-LDスキーマから URL 抽出）"""
+    """PayPay から最新値段を取得（シンプルな URL 抽出）"""
     try:
         url = f"https://paypayfleamarket.yahoo.co.jp/search/{quote(keyword)}"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
         response = requests.get(url, headers=headers, timeout=10)
-        print(f"DEBUG: Status={response.status_code}", file=sys.stderr)
+        print(f"検索中: {keyword} - Status {response.status_code}", file=sys.stderr)
 
         html_text = response.content.decode('utf-8', errors='ignore')
-        # より柔軟な JSON-LD 検出（改行・空白を許容）
-        json_ld_match = re.search(r'<script\s+type="application/ld\+json">(.+?)</script>', html_text, re.DOTALL)
 
-        if not json_ld_match:
-            # 別パターン：シングルクォート
-            json_ld_match = re.search(r"<script\s+type='application/ld\+json'>(.+?)</script>", html_text, re.DOTALL)
+        # /item/ パターンのURLを抽出
+        item_links = re.findall(r'href="(/item/\w+)"', html_text)
+        print(f"DEBUG: 見つかった /item/ リンク: {len(item_links)}", file=sys.stderr)
 
-        if not json_ld_match:
-            print(f"DEBUG: JSON-LD が見つかりません。HTML: {html_text[:500]}", file=sys.stderr)
-            return []
-
-        json_str = json_ld_match.group(1).strip()
-        try:
-            schemas = json.loads(json_str)
-            if not isinstance(schemas, list):
-                schemas = [schemas]
-            print(f"DEBUG: {len(schemas)} schemas parsed", file=sys.stderr)
-        except json.JSONDecodeError as e:
-            print(f"DEBUG: JSON parse error: {e} - first 200 chars: {json_str[:200]}", file=sys.stderr)
-            return []
-
-        item_urls = []
-        for i, schema in enumerate(schemas):
-            if isinstance(schema, dict):
-                if schema.get("@type") == "ItemList":
-                    items = schema.get("itemListElement", [])
-                    print(f"DEBUG: Schema {i} is ItemList with {len(items)} items", file=sys.stderr)
-                    for item in items:
-                        if isinstance(item, dict) and "url" in item:
-                            item_urls.append(item["url"])
-                else:
-                    print(f"DEBUG: Schema {i} type: {schema.get('@type')}", file=sys.stderr)
-
-        print(f"DEBUG: Extracted {len(item_urls)} URLs from JSON-LD", file=sys.stderr)
-        if not item_urls:
-            print(f"DEBUG: First schema structure: {str(schemas[0])[:300]}", file=sys.stderr)
+        if not item_links:
+            # 別パターン: シングルクォート
+            item_links = re.findall(r"href='(/item/\w+)'", html_text)
+            print(f"DEBUG: シングルクォート検索: {len(item_links)}", file=sys.stderr)
 
         results = []
-        for item_url in item_urls[:10]:
+        for item_path in item_links[:10]:  # 最初の10個を試す
             if len(results) >= TOP_N:
                 break
 
             try:
+                item_url = f"https://paypayfleamarket.yahoo.co.jp{item_path}"
                 item_response = requests.get(item_url, headers=headers, timeout=10)
-                item_soup = BeautifulSoup(item_response.content, "html.parser")
 
-                title_tag = item_soup.find("h1")
-                title = title_tag.get_text(strip=True) if title_tag else "Unknown"
-
-                price_match = re.search(r"¥([\d,]+)", item_soup.get_text())
-                if not price_match:
+                if item_response.status_code != 200:
                     continue
 
+                item_soup = BeautifulSoup(item_response.content, "html.parser")
+
+                # タイトル取得
+                title_tag = item_soup.find("h1")
+                if not title_tag:
+                    continue
+                title = title_tag.get_text(strip=True)
+
+                # キーワード確認（大まかに）
+                first_word = keyword.split()[0]
+                if first_word not in title:
+                    continue
+
+                # 除外キーワード確認
                 if any(kw in title.lower() for kw in EXCLUDE_KEYWORDS):
+                    continue
+
+                # 価格取得
+                price_match = re.search(r"¥([\d,]+)", item_soup.get_text())
+                if not price_match:
                     continue
 
                 price = int(price_match.group(1).replace(",", ""))
@@ -111,18 +99,17 @@ def scrape_card(keyword: str) -> list:
                     "price": price,
                     "url": item_url,
                 })
+                print(f"DEBUG: ✓ {title[:40]} - ¥{price}", file=sys.stderr)
 
             except Exception as e:
-                print(f"DEBUG: アイテム {item_url} 処理エラー: {e}", file=sys.stderr)
+                print(f"DEBUG: アイテム処理エラー: {e}", file=sys.stderr)
                 continue
 
-        print(f"DEBUG: 最終的に {len(results)} 個のアイテムを取得", file=sys.stderr)
+        print(f"最終結果: {keyword} - {len(results)}/{TOP_N} 件取得", file=sys.stderr)
         return results
 
     except Exception as e:
-        print(f"ERROR ({keyword}): {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
+        print(f"エラー ({keyword}): {e}", file=sys.stderr)
         return []
 
 def update_listings():
@@ -130,7 +117,6 @@ def update_listings():
     data = {}
 
     for i, keyword in enumerate(CARD_KEYWORDS):
-        print(f"取得中 ({i+1}/{len(CARD_KEYWORDS)}): {keyword}", file=sys.stderr)
         data[keyword] = scrape_card(keyword)
         time.sleep(0.5)
 
