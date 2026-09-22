@@ -251,11 +251,10 @@ def search_card(keyword: str) -> list[Listing]:
                     current_url = driver.current_url
                     print(f"詳細ページURL: {current_url}", file=sys.stderr)
 
-            try:
-                # DOM 全体をスキャンしてテキストを取得
-                page_text = driver.execute_script("return document.body.innerText || ''")
-                print(f"ページテキスト取得: {len(page_text)} 文字", file=sys.stderr)
-                print(f"ページテキスト先頭 500 文字: {page_text[:500]}", file=sys.stderr)
+                    # DOM 全体をスキャンしてテキストを取得
+                    page_text = driver.execute_script("return document.body.innerText || ''")
+                    print(f"ページテキスト取得: {len(page_text)} 文字", file=sys.stderr)
+                    print(f"ページテキスト先頭 500 文字: {page_text[:500]}", file=sys.stderr)
 
                 # 正規表現で商品名と価格を抽出
                 # 商品名：keyword を含む 5 文字以上のテキスト
@@ -326,8 +325,6 @@ def search_card(keyword: str) -> list[Listing]:
             except Exception as e:
                 print(f"商品 {product_index + 1} 抽出エラー: {type(e).__name__}: {e}", file=sys.stderr)
                 continue  # 次の商品へ
-
-            print(f"完了: {keyword} ({len(listings)}/{TOP_N} 件)", file=sys.stderr)
 
         finally:
             driver.quit()
