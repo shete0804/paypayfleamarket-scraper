@@ -218,12 +218,34 @@ def search_card(keyword: str) -> list[Listing]:
                 print(f"フィルター処理をスキップ: {e}", file=sys.stderr)
 
             # 複数の商品を試す（最初の 5 つまで）
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_all_elements_located((By.CSS_SELECTOR, "a[href*='item/'], [class*='ProductCard'] a"))
-            )
-            product_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='item/'], [class*='ProductCard'] a, [class*='product'] a")
+            # セレクタ候補（複数レベルでフォールバック）
+            selectors = [
+                "a[href*='/item/']",  # 直接的なitem URL
+                "[class*='ProductCard'] a",
+                "[class*='product'] a",
+                "[class*='listing'] a",
+                "li a[href*='item']",
+                "div[class*='card'] a",
+                "a.ProductCard__link",
+                "a[href*='paypayfleamarket']",
+                "a"  # 最後の手段：すべてのリンク
+            ]
+
+            product_links = []
+            for selector in selectors:
+                try:
+                    product_links = driver.find_elements(By.CSS_SELECTOR, selector)
+                    if product_links:
+                        print(f"セレクタ成功: {selector} - {len(product_links)}個の商品", file=sys.stderr)
+                        break
+                    else:
+                        print(f"セレクタ試行: {selector} - 結果なし", file=sys.stderr)
+                except Exception as selector_error:
+                    print(f"セレクタエラー: {selector} - {selector_error}", file=sys.stderr)
+
             if not product_links:
-                print(f"商品リンクが見つかりません", file=sys.stderr)
+                print(f"商品リンクが見つかりません（すべてのセレクタで失敗）", file=sys.stderr)
+                print(f"ページソース先頭1000文字: {driver.page_source[:1000]}", file=sys.stderr)
                 return listings
 
             print(f"見つかった商品数: {len(product_links)}", file=sys.stderr)
@@ -233,7 +255,22 @@ def search_card(keyword: str) -> list[Listing]:
                     print(f"--- 商品 {product_index + 1} を試行 ---", file=sys.stderr)
 
                     # 商品リンク再取得（DOM 更新対応）
-                    product_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='item/'], [class*='ProductCard'] a, [class*='product'] a")
+                    product_links_selectors = [
+                        "a[href*='/item/']",
+                        "[class*='ProductCard'] a",
+                        "[class*='product'] a",
+                        "li a[href*='item']",
+                        "a.ProductCard__link"
+                    ]
+                    product_links_retry = []
+                    for selector in product_links_selectors:
+                        try:
+                            product_links_retry = driver.find_elements(By.CSS_SELECTOR, selector)
+                            if product_links_retry:
+                                break
+                        except:
+                            pass
+                    product_links = product_links_retry if product_links_retry else product_links
                     if product_index >= len(product_links):
                         print(f"商品 {product_index + 1} はリスト外", file=sys.stderr)
                         break
