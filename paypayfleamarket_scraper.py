@@ -184,6 +184,14 @@ def search_card(keyword: str) -> list[Listing]:
             except Exception as e:
                 print(f"DEBUG: ProductCard wait timed out: {e}", file=sys.stderr)
 
+            # ページスクリーンショット（デバッグ用）
+            try:
+                screenshot_path = f"/tmp/paypay_search_{keyword.replace(' ', '_')}.png"
+                driver.save_screenshot(screenshot_path)
+                print(f"DEBUG: Screenshot saved to {screenshot_path}", file=sys.stderr)
+            except Exception as e:
+                print(f"DEBUG: Screenshot save failed: {e}", file=sys.stderr)
+
             # ページ全体のHTMLをダンプして分析
             try:
                 body_html = driver.find_element(By.TAG_NAME, "body").get_attribute("innerHTML")
