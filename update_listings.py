@@ -46,10 +46,16 @@ def scrape_card(keyword: str) -> list:
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
         response = requests.get(url, headers=headers, timeout=10)
+        print(f"DEBUG: Status={response.status_code}, Content-Length={len(response.content)}", file=sys.stderr)
+
         soup = BeautifulSoup(response.content, "html.parser")
 
         items = soup.find_all("a", href=re.compile(r"/item/"))
         print(f"DEBUG: 見つかった <a> タグ数: {len(items)}", file=sys.stderr)
+
+        if len(items) == 0:
+            # HTML の最初の 500 文字をデバッグ出力
+            print(f"DEBUG: HTML の最初の 500 文字: {response.content[:500].decode('utf-8', errors='ignore')}", file=sys.stderr)
 
         results = []
         for i, item in enumerate(items):
