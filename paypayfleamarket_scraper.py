@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PayPay フリマ スクレイパー（JSON ベース）"""
+"""PayPay フリマ スクレイパー（Apify を使用）"""
 
 import json
 import os
@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+APIFY_TOKEN = os.environ.get("APIFY_TOKEN", "").strip()
 
 CARD_KEYWORDS = [
     "メガルカリオex MUR メガブレイブ",
@@ -31,17 +32,74 @@ CARD_KEYWORDS = [
     "メガダークライex SAR アビスアイ",
 ]
 
+EXCLUDE_KEYWORDS = [
+    "セット", "2枚", "3枚", "4枚", "5枚", "10枚", "20枚",
+    "5パック", "10パック", "Box", "ボックス", "まとめ売り",
+    "福袋", "構築済みデッキ", "デッキ", "旧裏", "おまけ",
+    "2P", "3P", "4P", "5P",
+]
+
 TOP_N = 3
 JST = timezone(timedelta(hours=9))
 
-def load_listings():
-    """listings.json を読み込む"""
+def is_single_card(title: str) -> bool:
+    """タイトルからシングルカードかどうか判定"""
+    title_lower = title.lower()
+    for word in EXCLUDE_KEYWORDS:
+        if word in title_lower:
+            return False
+    return True
+
+def call_apify(keyword: str) -> list:
+    """Apify で PayPay フリマを検索"""
+    if not APIFY_TOKEN:
+        print(f"警告: APIFY_TOKEN が設定されていません", file=sys.stderr)
+        return []
+
     try:
-        with open("listings.json", "r", encoding="utf-8") as f:
-            return json.load(f)
+        url = "https://api.apify.com/v2/acts/youfuxu~paypay-flea-japan-scraper/run-sync-get-dataset-items"
+
+        params = {
+            "token": APIFY_TOKEN,
+        }
+
+        payload = {
+            "searchKeywords": [keyword],
+            "maxItems": 10,
+        }
+
+        response = requests.post(url, json=payload, params=params, timeout=60)
+        response.raise_for_status()
+
+        items = response.json() if isinstance(response.json(), list) else []
+
+        results = []
+        for item in items[:TOP_N]:
+            if not is_single_card(item.get("title", "")):
+                continue
+
+            price = item.get("price")
+            if not price:
+                continue
+
+            results.append({
+                "title": item.get("title", ""),
+                "price": int(price) if isinstance(price, (int, float)) else 0,
+                "url": item.get("url", ""),
+            })
+
+        return results[:TOP_N]
     except Exception as e:
-        print(f"ERROR loading listings.json: {e}")
-        return {}
+        print(f"Apify エラー ({keyword}): {type(e).__name__}: {e}", file=sys.stderr)
+        return []
+
+def fetch_all() -> dict:
+    """全カードを取得"""
+    results = {}
+    for keyword in CARD_KEYWORDS:
+        print(f"取得中: {keyword}", file=sys.stderr)
+        results[keyword] = call_apify(keyword)
+    return results
 
 def fmt_price(price):
     return f"¥{price:,}"
@@ -51,26 +109,30 @@ def now_jst():
 
 def send_discord(payload):
     if not DISCORD_WEBHOOK_URL:
-        print("Discord webhook not set, skipping send")
+        print("Discord webhook not set", file=sys.stderr)
         return
     try:
         r = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
         r.raise_for_status()
-        print(f"Discord sent OK")
+        print("Discord sent OK")
     except Exception as e:
-        print(f"Discord send error: {e}")
+        print(f"Discord error: {e}", file=sys.stderr)
 
 def main():
-    listings = load_listings()
-    if not listings:
-        print("No listings data")
+    if not APIFY_TOKEN:
+        print("環境変数 APIFY_TOKEN が必要です", file=sys.stderr)
         return 1
 
-    # Build embed
+    if not DISCORD_WEBHOOK_URL:
+        print("環境変数 DISCORD_WEBHOOK_URL が必要です", file=sys.stderr)
+        return 1
+
+    results = fetch_all()
+
     fields = []
     for keyword in CARD_KEYWORDS:
-        if keyword in listings:
-            items = listings[keyword][:TOP_N]
+        items = results.get(keyword, [])
+        if items:
             value = "\n".join(f"[{fmt_price(item['price'])}]({item['url']})" for item in items)
         else:
             value = "登録なし"
