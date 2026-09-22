@@ -40,56 +40,71 @@ EXCLUDE_KEYWORDS = [
 TOP_N = 3
 
 def scrape_card(keyword: str) -> list:
-    """PayPay から最新値段を取得"""
+    """PayPay から最新値段を取得（JSON-LDスキーマから URL 抽出）"""
     try:
         url = f"https://paypayfleamarket.yahoo.co.jp/search/{quote(keyword)}"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
         response = requests.get(url, headers=headers, timeout=10)
-        print(f"DEBUG: Status={response.status_code}, Content-Length={len(response.content)}", file=sys.stderr)
+        print(f"DEBUG: Status={response.status_code}", file=sys.stderr)
 
-        soup = BeautifulSoup(response.content, "html.parser")
+        html_text = response.content.decode('utf-8', errors='ignore')
+        json_ld_match = re.search(r'<script type="application/ld\+json">([^<]+)</script>', html_text)
 
-        items = soup.find_all("a", href=re.compile(r"/item/"))
-        print(f"DEBUG: 見つかった <a> タグ数: {len(items)}", file=sys.stderr)
+        if not json_ld_match:
+            print(f"DEBUG: JSON-LD スキーマが見つかりません", file=sys.stderr)
+            return []
 
-        if len(items) == 0:
-            # HTML の最初の 500 文字をデバッグ出力
-            print(f"DEBUG: HTML の最初の 500 文字: {response.content[:500].decode('utf-8', errors='ignore')}", file=sys.stderr)
+        try:
+            schemas = json.loads(json_ld_match.group(1))
+            if not isinstance(schemas, list):
+                schemas = [schemas]
+        except json.JSONDecodeError as e:
+            print(f"DEBUG: JSON パースエラー: {e}", file=sys.stderr)
+            return []
+
+        item_urls = []
+        for schema in schemas:
+            if schema.get("@type") == "ItemList" and "itemListElement" in schema:
+                for item in schema["itemListElement"]:
+                    if "url" in item:
+                        item_urls.append(item["url"])
+
+        print(f"DEBUG: JSON-LD から {len(item_urls)} 個の URL を抽出", file=sys.stderr)
 
         results = []
-        for i, item in enumerate(items):
+        for item_url in item_urls[:10]:
             if len(results) >= TOP_N:
                 break
 
-            text = item.get_text(strip=True)
-            print(f"DEBUG: アイテム {i+1}: {text[:60]}", file=sys.stderr)
+            try:
+                item_response = requests.get(item_url, headers=headers, timeout=10)
+                item_soup = BeautifulSoup(item_response.content, "html.parser")
 
-            # 除外キーワード判定
-            if any(kw in text.lower() for kw in EXCLUDE_KEYWORDS):
-                print(f"DEBUG:   → 除外キーワード検出", file=sys.stderr)
+                title_tag = item_soup.find("h1")
+                title = title_tag.get_text(strip=True) if title_tag else "Unknown"
+
+                price_match = re.search(r"¥([\d,]+)", item_soup.get_text())
+                if not price_match:
+                    continue
+
+                if any(kw in title.lower() for kw in EXCLUDE_KEYWORDS):
+                    continue
+
+                price = int(price_match.group(1).replace(",", ""))
+                results.append({
+                    "title": title[:50],
+                    "price": price,
+                    "url": item_url,
+                })
+
+            except Exception as e:
+                print(f"DEBUG: アイテム {item_url} 処理エラー: {e}", file=sys.stderr)
                 continue
 
-            # 価格を抽出
-            price_match = re.search(r"¥([\d,]+)", text)
-            if not price_match:
-                print(f"DEBUG:   → 価格パターン不一致", file=sys.stderr)
-                continue
-
-            print(f"DEBUG:   → 価格マッチ成功", file=sys.stderr)
-            price = int(price_match.group(1).replace(",", ""))
-            href = item.get("href", "")
-
-            if not href.startswith("http"):
-                href = f"https://paypayfleamarket.yahoo.co.jp{href}"
-
-            results.append({
-                "title": text[:50],
-                "price": price,
-                "url": href,
-            })
-
+        print(f"DEBUG: 最終的に {len(results)} 個のアイテムを取得", file=sys.stderr)
         return results
+
     except Exception as e:
         print(f"エラー ({keyword}): {e}", file=sys.stderr)
         return []
