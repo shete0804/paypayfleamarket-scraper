@@ -59,10 +59,10 @@ TOP_N = 3
 
 JST = timezone(timedelta(hours=9))
 
-NAV_TIMEOUT_MS = 60000
-RETRY_WAIT_SEC = 2
-MAX_RETRIES = 2
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+NAV_TIMEOUT_MS = 90000
+RETRY_WAIT_SEC = 3
+MAX_RETRIES = 3
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 EXCLUDE_KEYWORDS: set[str] = {
     "セット",
@@ -189,7 +189,7 @@ def scrape_card(page, keyword: str) -> list[Listing]:
         try:
             page.goto(
                 build_search_url(keyword),
-                wait_until="domcontentloaded",
+                wait_until="networkidle",
                 timeout=NAV_TIMEOUT_MS,
             )
             page.wait_for_timeout(2000)
