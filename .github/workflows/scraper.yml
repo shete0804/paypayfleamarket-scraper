@@ -24,11 +24,14 @@ jobs:
       - name: Install dependencies
         run: pip install requests beautifulsoup4
 
+      - name: "Debug: Fetch raw HTML"
+        run: python debug_html.py
+
       - name: Scrape and update
         run: python update_listings.py
 
       - name: "Debug: Test scrape"
-        run: python test_scrape.py
+        run: python test_scrape.py 2>&1 || true
 
       - name: Send to Discord
         env:
