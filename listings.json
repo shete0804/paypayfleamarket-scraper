@@ -1,36 +1,27 @@
 {
   "メガルカリオex MUR メガブレイブ": [
-    {
-      "title": "メガルカリオex MUR メガブレイブ 新品",
-      "price": 8500,
-      "url": "https://www.paypayfleamarket.yahoo.co.jp/item/a1234567890"
-    },
-    {
-      "title": "メガルカリオex MUR メガブレイブ 新品未開封",
-      "price": 8800,
-      "url": "https://www.paypayfleamarket.yahoo.co.jp/item/b1234567890"
-    },
-    {
-      "title": "メガルカリオex MUR メガブレイブ",
-      "price": 9200,
-      "url": "https://www.paypayfleamarket.yahoo.co.jp/item/c1234567890"
-    }
+    {"title": "メガルカリオex MUR メガブレイブ 新品", "price": 8500, "url": "https://www.paypayfleamarket.yahoo.co.jp/item/a1234567890"},
+    {"title": "メガルカリオex MUR メガブレイブ 新品未開封", "price": 8800, "url": "https://www.paypayfleamarket.yahoo.co.jp/item/b1234567890"},
+    {"title": "メガルカリオex MUR メガブレイブ", "price": 9200, "url": "https://www.paypayfleamarket.yahoo.co.jp/item/c1234567890"}
   ],
   "リーリエの決心 SAR メガブレイブ": [
-    {
-      "title": "リーリエの決心 SAR メガブレイブ 新品",
-      "price": 12500,
-      "url": "https://www.paypayfleamarket.yahoo.co.jp/item/d1234567890"
-    },
-    {
-      "title": "リーリエの決心 SAR メガブレイブ",
-      "price": 13200,
-      "url": "https://www.paypayfleamarket.yahoo.co.jp/item/e1234567890"
-    },
-    {
-      "title": "リーリエの決心 SAR",
-      "price": 14500,
-      "url": "https://www.paypayfleamarket.yahoo.co.jp/item/f1234567890"
-    }
+    {"title": "リーリエの決心 SAR メガブレイブ 新品", "price": 12500, "url": "https://www.paypayfleamarket.yahoo.co.jp/item/d1234567890"},
+    {"title": "リーリエの決心 SAR メガブレイブ", "price": 13200, "url": "https://www.paypayfleamarket.yahoo.co.jp/item/e1234567890"},
+    {"title": "リーリエの決心 SAR", "price": 14500, "url": "https://www.paypayfleamarket.yahoo.co.jp/item/f1234567890"}
+  ],
+  "メガゲッコウガex MUR ニンジャスピナー": [
+    {"title": "メガゲッコウガex MUR ニンジャスピナー 新品", "price": 59000, "url": "https://www.paypayfleamarket.yahoo.co.jp/item/g1234567890"},
+    {"title": "メガゲッコウガex MUR ニンジャスピナー 新品未開封", "price": 61000, "url": "https://www.paypayfleamarket.yahoo.co.jp/item/h1234567890"},
+    {"title": "メガゲッコウガex MUR ニンジャスピナー", "price": 63000, "url": "https://www.paypayfleamarket.yahoo.co.jp/item/i1234567890"}
+  ],
+  "メガボーマンダex DRR フェアリースターター": [
+    {"title": "メガボーマンダex DRR フェアリースターター 新品", "price": 4500, "url": "https://www.paypayfleamarket.yahoo.co.jp/item/j1234567890"},
+    {"title": "メガボーマンダex DRR フェアリースターター 新品未開封", "price": 4800, "url": "https://www.paypayfleamarket.yahoo.co.jp/item/k1234567890"},
+    {"title": "メガボーマンダex DRR フェアリースターター", "price": 5200, "url": "https://www.paypayfleamarket.yahoo.co.jp/item/l1234567890"}
+  ],
+  "メガハッサムex MUR メタルシンフォニー": [
+    {"title": "メガハッサムex MUR メタルシンフォニー 新品", "price": 3200, "url": "https://www.paypayfleamarket.yahoo.co.jp/item/m1234567890"},
+    {"title": "メガハッサムex MUR メタルシンフォニー 新品未開封", "price": 3600, "url": "https://www.paypayfleamarket.yahoo.co.jp/item/n1234567890"},
+    {"title": "メガハッサムex MUR メタルシンフォニー", "price": 4000, "url": "https://www.paypayfleamarket.yahoo.co.jp/item/o1234567890"}
   ]
 }
