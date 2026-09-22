@@ -1,3 +1,5 @@
+# PayPay Flea Market と メルカリの値段差比較システム
+# 自動更新版（update_listings.py + Discord送信）
 name: PayPay Flea Market Scraper
 
 on:
