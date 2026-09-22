@@ -238,8 +238,8 @@ def search_card(keyword: str) -> list[Listing]:
             print(f"詳細ページURL: {current_url}", file=sys.stderr)
 
             try:
-                # 商品名を取得
-                title_selectors = ["h1 span", "h1", "[class*='ItemName']", "[class*='productName']"]
+                # 商品名を取得（複数セレクタ + JavaScript フォールバック）
+                title_selectors = ["h1 span", "h1", "[class*='ItemName']", "[class*='productName']", "div[class*='item'] h1", "div[class*='title']"]
                 title = None
                 for selector in title_selectors:
                     try:
@@ -247,8 +247,15 @@ def search_card(keyword: str) -> list[Listing]:
                             EC.presence_of_element_located((By.CSS_SELECTOR, selector))
                         )
                         title = elem.text.strip()
-                        if title and len(title) > 0:
+                        if title and len(title) > 5:  # 商品名は通常 5 文字以上
                             break
+                    except:
+                        pass
+
+                # JavaScript フォールバック：h1 要素をすべて試す
+                if not title:
+                    try:
+                        title = driver.execute_script("return document.querySelector('h1')?.textContent || ''").strip()
                     except:
                         pass
 
@@ -262,8 +269,8 @@ def search_card(keyword: str) -> list[Listing]:
                     print(f"除外（複数枚セット等）: {title}", file=sys.stderr)
                     return listings
 
-                # 価格を取得
-                price_selectors = ["[class*='Price'] span", "span[class*='price']", "[class*='ItemPrice'] span"]
+                # 価格を取得（複数セレクタ + JavaScript フォールバック）
+                price_selectors = ["[class*='Price'] span", "span[class*='price']", "[class*='ItemPrice'] span", "[class*='price']"]
                 price = None
                 for selector in price_selectors:
                     try:
@@ -274,6 +281,17 @@ def search_card(keyword: str) -> list[Listing]:
                         if price_text.isdigit():
                             price = int(price_text)
                             break
+                    except:
+                        pass
+
+                # JavaScript フォールバック：¥ で始まるテキストを探す
+                if not price:
+                    try:
+                        price_text = driver.execute_script(
+                            "return Array.from(document.querySelectorAll('*')).find(el => /¥\\d+/.test(el.textContent))?.textContent || ''"
+                        ).replace("¥", "").replace("￥", "").replace(",", "").split()[0]
+                        if price_text.isdigit():
+                            price = int(price_text)
                     except:
                         pass
 
