@@ -217,7 +217,7 @@ def search_card(keyword: str) -> list[Listing]:
             except Exception as e:
                 print(f"フィルター処理をスキップ: {e}", file=sys.stderr)
 
-            # 最初の商品をクリック
+            # 複数の商品を試す（最初の 5 つまで）
             WebDriverWait(driver, 15).until(
                 EC.presence_of_all_elements_located((By.CSS_SELECTOR, "a[href*='item/'], [class*='ProductCard'] a"))
             )
@@ -226,16 +226,30 @@ def search_card(keyword: str) -> list[Listing]:
                 print(f"商品リンクが見つかりません", file=sys.stderr)
                 return listings
 
-            first_link = product_links[0]
-            driver.execute_script("arguments[0].click();", first_link)
-            print(f"最初の商品をクリック", file=sys.stderr)
-            WebDriverWait(driver, 15).until(
-                EC.url_contains("item/")
-            )
+            print(f"見つかった商品数: {len(product_links)}", file=sys.stderr)
 
-            # 詳細ページから商品データを抽出
-            current_url = driver.current_url
-            print(f"詳細ページURL: {current_url}", file=sys.stderr)
+            for product_index in range(min(5, len(product_links))):
+                try:
+                    print(f"--- 商品 {product_index + 1} を試行 ---", file=sys.stderr)
+
+                    # 商品リンク再取得（DOM 更新対応）
+                    product_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='item/'], [class*='ProductCard'] a, [class*='product'] a")
+                    if product_index >= len(product_links):
+                        print(f"商品 {product_index + 1} はリスト外", file=sys.stderr)
+                        break
+
+                    product_link = product_links[product_index]
+                    driver.execute_script("arguments[0].click();", product_link)
+                    print(f"商品 {product_index + 1} をクリック", file=sys.stderr)
+
+                    # 詳細ページへのナビゲーション待機
+                    WebDriverWait(driver, 10).until(
+                        EC.url_contains("item/")
+                    )
+
+                    # 詳細ページから商品データを抽出
+                    current_url = driver.current_url
+                    print(f"詳細ページURL: {current_url}", file=sys.stderr)
 
             try:
                 # DOM 全体をスキャンしてテキストを取得
@@ -271,14 +285,15 @@ def search_card(keyword: str) -> list[Listing]:
 
                 if not title:
                     print(f"商品名が取得できません: keyword='{keyword}'", file=sys.stderr)
-                    print(f"最初の 10 行: {lines[:10]}", file=sys.stderr)
-                    return listings
+                    print(f"商品 {product_index + 1} を Skip → 次へ", file=sys.stderr)
+                    continue  # 次の商品へ
 
                 print(f"商品名: {title}", file=sys.stderr)
 
                 if not is_single_card(title):
                     print(f"除外（複数枚セット等）: {title}", file=sys.stderr)
-                    return listings
+                    print(f"商品 {product_index + 1} を Skip → 次へ", file=sys.stderr)
+                    continue  # 次の商品へ
 
                 # 価格抽出：¥XXXXX 形式または数字 5 桁以上
                 price_match = re.search(r'¥[\s]?(\d+(?:,\d+)*)', page_text)
@@ -295,17 +310,24 @@ def search_card(keyword: str) -> list[Listing]:
 
                 if not price:
                     print(f"価格が取得できません: {title}", file=sys.stderr)
-                    return listings
+                    print(f"商品 {product_index + 1} を Skip → 次へ", file=sys.stderr)
+                    continue  # 次の商品へ
 
                 print(f"価格: ¥{price:,}", file=sys.stderr)
 
                 listings.append(Listing(card=keyword, price=price, url=current_url))
                 print(f"取得完了: {title} - ¥{price:,}", file=sys.stderr)
 
-            except Exception as e:
-                print(f"詳細ページ抽出エラー: {type(e).__name__}: {e}", file=sys.stderr)
+                # TOP_N 件に達したら終了
+                if len(listings) >= TOP_N:
+                    print(f"TOP_N ({TOP_N} 件) に達したため終了", file=sys.stderr)
+                    break
 
-            print(f"完了: {keyword} ({len(listings)} 件)", file=sys.stderr)
+            except Exception as e:
+                print(f"商品 {product_index + 1} 抽出エラー: {type(e).__name__}: {e}", file=sys.stderr)
+                continue  # 次の商品へ
+
+            print(f"完了: {keyword} ({len(listings)}/{TOP_N} 件)", file=sys.stderr)
 
         finally:
             driver.quit()
