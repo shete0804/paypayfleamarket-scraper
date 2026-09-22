@@ -237,7 +237,10 @@ def fetch_all() -> tuple[dict[str, list[Listing]], dict[str, str]]:
                     errors[keyword] = error_msg
                     print(f"  {error_msg}", file=sys.stderr)
         finally:
-            browser.close()
+            try:
+                browser.close()
+            except Exception as e:
+                print(f"ブラウザクローズエラー: {e}", file=sys.stderr)
 
     return results, errors
 
