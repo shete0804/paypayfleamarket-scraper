@@ -64,25 +64,43 @@ JST = timezone(timedelta(hours=9))
 # ---------------------------------------------------------------------------
 
 
-def load_listings() -> dict[str, list[dict]]:
-    """listings.json から出品情報を読み込む"""
+def load_listings() -> tuple[dict[str, list[dict]], str | None]:
+    """listings.json から出品情報を読み込む。失敗時はエラーメッセージを返す"""
     try:
-        with open(LISTINGS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        print(f"エラー: {LISTINGS_FILE} が見つかりません", file=sys.stderr)
-        return {}
-    except json.JSONDecodeError as e:
-        print(f"エラー: {LISTINGS_FILE} の解析に失敗しました: {e}", file=sys.stderr)
-        return {}
+        # 複数のパスを試す
+        possible_paths = [
+            LISTINGS_FILE,
+            f"./{LISTINGS_FILE}",
+            f"/github/workspace/{LISTINGS_FILE}",
+        ]
+
+        for path in possible_paths:
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    print(f"✓ {path} を読み込みました", file=sys.stderr)
+                    return data, None
+            except FileNotFoundError:
+                continue
+            except json.JSONDecodeError as e:
+                return {}, f"{path} の JSON 解析に失敗: {e}"
+
+        # すべてのパスが失敗
+        return {}, f"{LISTINGS_FILE} が見つかりません（試行済みパス: {possible_paths}）"
+
+    except Exception as e:
+        return {}, f"ファイル読み込みエラー: {e}"
 
 
-def fetch_all() -> tuple[dict[str, list[dict]], dict[str, str]]:
+def fetch_all() -> tuple[dict[str, list[dict]], dict[str, str], str | None]:
     """listings.json から全カードの出品情報を取得"""
     results: dict[str, list[dict]] = {}
     errors: dict[str, str] = {}
 
-    listings = load_listings()
+    listings, load_error = load_listings()
+
+    if load_error:
+        return results, errors, load_error
 
     for keyword in CARD_KEYWORDS:
         if keyword in listings:
@@ -93,7 +111,7 @@ def fetch_all() -> tuple[dict[str, list[dict]], dict[str, str]]:
             errors[keyword] = error_msg
             print(f"取得中: {keyword} - {error_msg}", file=sys.stderr)
 
-    return results, errors
+    return results, errors, None
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +174,7 @@ def post_failure(title: str, detail: str) -> None:
 
 def main() -> int:
     try:
-        results, errors = fetch_all()
+        results, errors, load_error = fetch_all()
     except Exception:
         detail = traceback.format_exc()
         print(f"スクレイピング失敗: {detail}", file=sys.stderr)
@@ -164,6 +182,14 @@ def main() -> int:
             post_failure("スクレイピング失敗", detail)
         return 1
 
+    # ファイル読み込みエラー
+    if load_error:
+        print(f"致命的エラー: {load_error}", file=sys.stderr)
+        if DISCORD_WEBHOOK_URL:
+            post_failure("listings.json 読み込みエラー", load_error)
+        return 1
+
+    # すべてのカードで取得失敗（実データがない）
     if errors and len(errors) == len(CARD_KEYWORDS):
         detail = "\n".join(f"- {k}: {v}" for k, v in errors.items())
         print(f"すべてのカードで取得失敗: {detail}", file=sys.stderr)
@@ -171,6 +197,7 @@ def main() -> int:
             post_failure("スクレイピング失敗", detail)
         return 1
 
+    # 成功：データを報告（Discord または コンソール）
     if DISCORD_WEBHOOK_URL:
         post_report(results, errors)
     else:
