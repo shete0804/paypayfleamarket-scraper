@@ -466,12 +466,34 @@ def fetch_all() -> tuple[dict[str, list[Listing]], dict[str, str]]:
     results: dict[str, list[Listing]] = {}
     errors: dict[str, str] = {}
 
+    # デバッグログをファイルに保存
+    import os as _os
+    _debug_dir = "debug_output"
+    if not _os.path.exists(_debug_dir):
+        _os.makedirs(_debug_dir)
+    _debug_file = _os.path.join(_debug_dir, f"debug_{datetime.now(JST).strftime('%Y%m%d_%H%M%S')}.log")
+
+    # stderr をファイルにリダイレクト
+    _original_stderr = sys.stderr
+    try:
+        _debug_fp = open(_debug_file, "w", encoding="utf-8")
+        sys.stderr = _debug_fp
+    except Exception as _e:
+        print(f"デバッグログファイル作成失敗: {_e}", file=_original_stderr)
+        _debug_fp = None
+
     for keyword in CARD_KEYWORDS:
         try:
             result = search_card(keyword)
             results[keyword] = result
         except Exception as e:
             errors[keyword] = str(e)
+
+    # stderr をリストア
+    if _debug_fp:
+        sys.stderr = _original_stderr
+        _debug_fp.close()
+        print(f"デバッグログを保存しました: {_debug_file}", file=sys.stderr)
 
     return results, errors
 
