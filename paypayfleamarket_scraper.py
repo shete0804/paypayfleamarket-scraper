@@ -217,6 +217,12 @@ def search_card(keyword: str) -> list[Listing]:
             except Exception as e:
                 print(f"フィルター処理をスキップ: {e}", file=sys.stderr)
 
+            # ページをスクロールして遅延ロード要素を読み込む
+            print(f"ページをスクロール中...", file=sys.stderr)
+            driver.execute_script("window.scrollBy(0, window.innerHeight);")
+            import time
+            time.sleep(2)
+
             # 複数の商品を試す（最初の 5 つまで）
             # セレクタ候補（複数レベルでフォールバック）
             selectors = [
@@ -245,10 +251,19 @@ def search_card(keyword: str) -> list[Listing]:
 
             if not product_links:
                 print(f"商品リンクが見つかりません（すべてのセレクタで失敗）", file=sys.stderr)
-                print(f"ページソース先頭1000文字: {driver.page_source[:1000]}", file=sys.stderr)
+                # ページ内のすべてのリンクを列挙してデバッグ
+                all_links = driver.find_elements(By.TAG_NAME, "a")
+                print(f"ページ内の全リンク数: {len(all_links)}", file=sys.stderr)
+                print(f"最初の20個のリンク href: {[link.get_attribute('href')[:80] if link.get_attribute('href') else 'N/A' for link in all_links[:20]]}", file=sys.stderr)
+                print(f"ページソース先頭2000文字: {driver.page_source[:2000]}", file=sys.stderr)
                 return listings
 
             print(f"見つかった商品数: {len(product_links)}", file=sys.stderr)
+            # 見つかったリンクの詳細情報を出力
+            for i, link in enumerate(product_links[:5]):
+                href = link.get_attribute('href')
+                text = link.text
+                print(f"  [商品{i+1}] href={href}, text={text[:50] if text else 'N/A'}", file=sys.stderr)
 
             for product_index in range(min(5, len(product_links))):
                 try:
