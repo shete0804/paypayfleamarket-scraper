@@ -31,3 +31,11 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python paypayfleamarket_scraper.py
+
+      - name: Commit and push updates
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add listings.json
+          git commit -m "自動更新: PayPay フリマ最新価格取得 $(date +'%Y-%m-%d %H:%M JST')" || true
+          git push
