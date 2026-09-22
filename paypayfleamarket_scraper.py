@@ -44,7 +44,7 @@ CARD_KEYWORDS: list[str] = [
     "ピカチュウex SAR MEGAドリームex",
     "ロケット団のミュウツーex SAR MEGAドリームex",
     "メガゲンガーex SAR MEGAドリームex",
-    "メガカイリューex SAR MEガドリームex",
+    "メガカイリューex SAR MEGAドリームex",
     "メガジガルデex MUR ムニキスゼロ",
     "ニャースex SAR ムニキスゼロ",
     "メイのはげまし SAR ムニキスゼロ",
@@ -155,22 +155,34 @@ def post_failure(title: str, detail: str) -> None:
 
 
 def main() -> int:
-    if not DISCORD_WEBHOOK_URL:
-        print("環境変数 DISCORD_WEBHOOK_URL が必要です", file=sys.stderr)
-        return 1
-
     try:
         results, errors = fetch_all()
     except Exception:
-        post_failure("スクレイピング失敗", traceback.format_exc())
+        detail = traceback.format_exc()
+        print(f"スクレイピング失敗: {detail}", file=sys.stderr)
+        if DISCORD_WEBHOOK_URL:
+            post_failure("スクレイピング失敗", detail)
         return 1
 
     if errors and len(errors) == len(CARD_KEYWORDS):
         detail = "\n".join(f"- {k}: {v}" for k, v in errors.items())
-        post_failure("スクレイピング失敗", detail)
+        print(f"すべてのカードで取得失敗: {detail}", file=sys.stderr)
+        if DISCORD_WEBHOOK_URL:
+            post_failure("スクレイピング失敗", detail)
         return 1
 
-    post_report(results, errors)
+    if DISCORD_WEBHOOK_URL:
+        post_report(results, errors)
+    else:
+        # Webhook なしの場合は、結果をコンソール出力
+        print("=== PayPay フリマ価格情報（Discord Webhook なし） ===", file=sys.stderr)
+        for keyword in CARD_KEYWORDS:
+            listings = results.get(keyword, [])
+            if listings:
+                prices = ", ".join(f"¥{l['price']:,}" for l in listings)
+                print(f"{keyword}: {prices}", file=sys.stderr)
+            else:
+                print(f"{keyword}: 登録なし", file=sys.stderr)
 
     if errors:
         print(f"{len(errors)} 件のカードで取得失敗", file=sys.stderr)
