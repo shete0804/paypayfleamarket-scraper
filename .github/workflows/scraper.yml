@@ -1,5 +1,3 @@
-# PayPay Flea Market と メルカリの値段差比較システム
-# 自動更新版（update_listings.py + Discord送信）
 name: PayPay Flea Market Scraper
 
 on:
@@ -11,31 +9,33 @@ on:
     - cron: '0 */6 * * *'
 
 jobs:
-  run-scraper:
+  scrape:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install requests beautifulsoup4
 
-      - name: Scrape PayPay Flea Market
-        run: python test_workflow.py
+      - name: Scrape and update
+        run: python update_listings.py
 
-      - name: Send Discord Notification
+      - name: Send to Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python paypayfleamarket_scraper.py
 
-      - name: Git Commit and Push
+      - name: Commit changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add listings.json
-          git commit -m "自動更新: PayPay フリマ最新価格取得 $(date +'%Y-%m-%d %H:%M JST')" || true
-          git push https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          git commit -m "auto: update listings" || true
+          git push https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git || true
