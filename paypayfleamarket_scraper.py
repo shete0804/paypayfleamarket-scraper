@@ -177,13 +177,24 @@ def search_card(keyword: str) -> list[Listing]:
             for attempt in range(max_retries):
                 try:
                     driver.get("https://www.paypayfleamarket.yahoo.co.jp/")
+                    print(f"ページロード待機中...", file=sys.stderr)
                     WebDriverWait(driver, 15).until(
                         EC.presence_of_element_located((By.NAME, "word"))
                     )
+                    # ページが完全に読み込まれたか確認
+                    doc_ready = driver.execute_script("return document.readyState")
+                    print(f"Document Ready State: {doc_ready}", file=sys.stderr)
+
+                    # ページ内容をチェック
+                    page_title = driver.title
+                    body_text_length = len(driver.execute_script("return document.body.innerText"))
+                    print(f"ページタイトル: {page_title}, Body テキスト長: {body_text_length}", file=sys.stderr)
+
                     print(f"トップページアクセス成功（試行 {attempt + 1}/{max_retries}）", file=sys.stderr)
                     break
                 except Exception as retry_error:
                     print(f"トップページアクセス失敗（試行 {attempt + 1}/{max_retries}）: {retry_error}", file=sys.stderr)
+                    print(f"ページソース長: {len(driver.page_source)}", file=sys.stderr)
                     if attempt == max_retries - 1:
                         raise
                     import time
