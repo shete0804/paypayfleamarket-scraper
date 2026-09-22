@@ -267,12 +267,15 @@ def search_card(keyword: str) -> list[Listing]:
             product_links = []
             for selector in selectors:
                 try:
-                    product_links = driver.find_elements(By.CSS_SELECTOR, selector)
-                    if product_links:
-                        print(f"セレクタ成功: {selector} - {len(product_links)}個の商品", file=sys.stderr)
+                    candidates = driver.find_elements(By.CSS_SELECTOR, selector)
+                    # リンク検証：href が item ページを指しているか確認
+                    valid_links = [link for link in candidates if link.get_attribute('href') and '/item/' in link.get_attribute('href')]
+                    if valid_links:
+                        product_links = valid_links
+                        print(f"セレクタ成功: {selector} - {len(product_links)}個の有効な商品リンク", file=sys.stderr)
                         break
                     else:
-                        print(f"セレクタ試行: {selector} - 結果なし", file=sys.stderr)
+                        print(f"セレクタ試行: {selector} - 候補{len(candidates)}個だが有効なitem URLなし", file=sys.stderr)
                 except Exception as selector_error:
                     print(f"セレクタエラー: {selector} - {selector_error}", file=sys.stderr)
 
