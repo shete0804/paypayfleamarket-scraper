@@ -111,12 +111,7 @@ EXCLUDE_KEYWORDS: set[str] = {
 }
 
 
-@dataclass
 class Listing:
-    card: str
-    price: int
-    url: str
-
     def __init__(self, card: str = None, price: int = 0, url: str = "", title: str = None):
         # 互換性：title パラメータを受け付けて card に変換
         self.card = title if title is not None else card
