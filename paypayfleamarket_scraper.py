@@ -256,71 +256,71 @@ def search_card(keyword: str) -> list[Listing]:
                     print(f"ページテキスト取得: {len(page_text)} 文字", file=sys.stderr)
                     print(f"ページテキスト先頭 500 文字: {page_text[:500]}", file=sys.stderr)
 
-                # 正規表現で商品名と価格を抽出
-                # 商品名：keyword を含む 5 文字以上のテキスト
-                import re
+                    # 正規表現で商品名と価格を抽出
+                    # 商品名：keyword を含む 5 文字以上のテキスト
+                    import re
 
-                title = None
-                price = None
+                    title = None
+                    price = None
 
-                # 商品名抽出：keyword を含み、複数単語セット除外語を含まない行を探す
-                lines = page_text.split('\n')
-                for line in lines:
-                    line = line.strip()
-                    if keyword in line and len(line) > 5:
-                        if not any(exclude in line for exclude in EXCLUDE_KEYWORDS):
-                            title = line
-                            print(f"商品名候補: {line}", file=sys.stderr)
-                            break
-
-                # 代替：最初の有意なタイトル形式を探す
-                if not title:
+                    # 商品名抽出：keyword を含み、複数単語セット除外語を含まない行を探す
+                    lines = page_text.split('\n')
                     for line in lines:
                         line = line.strip()
-                        if 5 < len(line) < 200 and not any(exclude in line for exclude in EXCLUDE_KEYWORDS):
-                            if not any(c.isdigit() for c in line[:5]):  # 最初の 5 文字に数字がない
+                        if keyword in line and len(line) > 5:
+                            if not any(exclude in line for exclude in EXCLUDE_KEYWORDS):
                                 title = line
+                                print(f"商品名候補: {line}", file=sys.stderr)
                                 break
 
-                if not title:
-                    print(f"商品名が取得できません: keyword='{keyword}'", file=sys.stderr)
-                    print(f"商品 {product_index + 1} を Skip → 次へ", file=sys.stderr)
-                    continue  # 次の商品へ
+                    # 代替：最初の有意なタイトル形式を探す
+                    if not title:
+                        for line in lines:
+                            line = line.strip()
+                            if 5 < len(line) < 200 and not any(exclude in line for exclude in EXCLUDE_KEYWORDS):
+                                if not any(c.isdigit() for c in line[:5]):  # 最初の 5 文字に数字がない
+                                    title = line
+                                    break
 
-                print(f"商品名: {title}", file=sys.stderr)
+                    if not title:
+                        print(f"商品名が取得できません: keyword='{keyword}'", file=sys.stderr)
+                        print(f"商品 {product_index + 1} を Skip → 次へ", file=sys.stderr)
+                        continue  # 次の商品へ
 
-                if not is_single_card(title):
-                    print(f"除外（複数枚セット等）: {title}", file=sys.stderr)
-                    print(f"商品 {product_index + 1} を Skip → 次へ", file=sys.stderr)
-                    continue  # 次の商品へ
+                    print(f"商品名: {title}", file=sys.stderr)
 
-                # 価格抽出：¥XXXXX 形式または数字 5 桁以上
-                price_match = re.search(r'¥[\s]?(\d+(?:,\d+)*)', page_text)
-                if not price_match:
-                    # 代替：単純な数字を探す（4 桁以上）
-                    price_match = re.search(r'\b(\d{4,})\b', page_text)
+                    if not is_single_card(title):
+                        print(f"除外（複数枚セット等）: {title}", file=sys.stderr)
+                        print(f"商品 {product_index + 1} を Skip → 次へ", file=sys.stderr)
+                        continue  # 次の商品へ
 
-                if price_match:
-                    price_str = price_match.group(1).replace(',', '')
-                    try:
-                        price = int(price_str)
-                    except:
-                        pass
+                    # 価格抽出：¥XXXXX 形式または数字 5 桁以上
+                    price_match = re.search(r'¥[\s]?(\d+(?:,\d+)*)', page_text)
+                    if not price_match:
+                        # 代替：単純な数字を探す（4 桁以上）
+                        price_match = re.search(r'\b(\d{4,})\b', page_text)
 
-                if not price:
-                    print(f"価格が取得できません: {title}", file=sys.stderr)
-                    print(f"商品 {product_index + 1} を Skip → 次へ", file=sys.stderr)
-                    continue  # 次の商品へ
+                    if price_match:
+                        price_str = price_match.group(1).replace(',', '')
+                        try:
+                            price = int(price_str)
+                        except:
+                            pass
 
-                print(f"価格: ¥{price:,}", file=sys.stderr)
+                    if not price:
+                        print(f"価格が取得できません: {title}", file=sys.stderr)
+                        print(f"商品 {product_index + 1} を Skip → 次へ", file=sys.stderr)
+                        continue  # 次の商品へ
 
-                listings.append(Listing(card=keyword, price=price, url=current_url))
-                print(f"取得完了: {title} - ¥{price:,}", file=sys.stderr)
+                    print(f"価格: ¥{price:,}", file=sys.stderr)
 
-                # TOP_N 件に達したら終了
-                if len(listings) >= TOP_N:
-                    print(f"TOP_N ({TOP_N} 件) に達したため終了", file=sys.stderr)
-                    break
+                    listings.append(Listing(card=keyword, price=price, url=current_url))
+                    print(f"取得完了: {title} - ¥{price:,}", file=sys.stderr)
+
+                    # TOP_N 件に達したら終了
+                    if len(listings) >= TOP_N:
+                        print(f"TOP_N ({TOP_N} 件) に達したため終了", file=sys.stderr)
+                        break
 
             except Exception as e:
                 print(f"商品 {product_index + 1} 抽出エラー: {type(e).__name__}: {e}", file=sys.stderr)
