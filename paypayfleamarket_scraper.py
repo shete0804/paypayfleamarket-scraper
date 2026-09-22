@@ -47,24 +47,33 @@ socket.setdefaulttimeout(10)
 try:
     socket.gaierror
     import socket as sock_module
+    import subprocess
+    import re
     original_getaddrinfo = sock_module.getaddrinfo
 
     def patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
         try:
             return original_getaddrinfo(host, port, family, type, proto, flags)
-        except socket.gaierror:
-            import subprocess
+        except socket.gaierror as e:
+            print(f"DNS resolution failed for {host}: {e}. Trying nslookup...", file=sys.stderr)
             try:
-                result = subprocess.check_output(['nslookup', host, '8.8.8.8'], stderr=subprocess.DEVNULL, timeout=5).decode()
-                if 'Address:' in result:
-                    return original_getaddrinfo(host, port, family, type, proto, flags)
-            except:
-                pass
+                result = subprocess.check_output(
+                    ['nslookup', host, '8.8.8.8'],
+                    stderr=subprocess.DEVNULL,
+                    timeout=5
+                ).decode()
+                match = re.search(r'Address:\s+(\d+\.\d+\.\d+\.\d+)', result)
+                if match:
+                    ip = match.group(1)
+                    print(f"Resolved {host} to {ip} via nslookup", file=sys.stderr)
+                    return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', (ip, port))]
+            except Exception as fallback_error:
+                print(f"Fallback DNS resolution failed: {fallback_error}", file=sys.stderr)
             raise
 
     sock_module.getaddrinfo = patched_getaddrinfo
-except:
-    pass
+except Exception as patch_error:
+    print(f"Could not patch DNS: {patch_error}", file=sys.stderr)
 
 CARD_KEYWORDS: list[str] = [
     "メガルカリオex MUR メガブレイブ",
