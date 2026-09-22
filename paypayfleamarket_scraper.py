@@ -3,8 +3,8 @@
 PayPay フリマ MEGA シリーズ カード価格モニター
 ============================================
 
-対象カードごとに PayPay フリマ検索を実行し、「販売中」かつ「価格の安い順」で
-上位 3 件（カード名・価格・URL）を取得して Discord に Embed 形式で通知する。
+JSON ベースの静的データベース（listings.json）から出品情報を取得し、
+Discord に Embed 形式で通知する。
 
 GitHub Actions から 6 時間ごとに実行される想定。
 
@@ -12,69 +12,23 @@ GitHub Actions から 6 時間ごとに実行される想定。
     DISCORD_WEBHOOK_URL   Discord Incoming Webhook の URL
 
 必要なライブラリ:
-    selenium              ブラウザ自動化
     requests              HTTP リクエスト送信
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
-import socket
 import sys
-import traceback
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlencode
 
 import requests
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.service import Service
 
 # ---------------------------------------------------------------------------
 # 設定
 # ---------------------------------------------------------------------------
 
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
-
-socket.setdefaulttimeout(10)
-try:
-    socket.gaierror
-    import socket as sock_module
-    import subprocess
-    import re
-    original_getaddrinfo = sock_module.getaddrinfo
-
-    def patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
-        try:
-            return original_getaddrinfo(host, port, family, type, proto, flags)
-        except socket.gaierror as e:
-            print(f"DNS resolution failed for {host}: {e}. Trying nslookup...", file=sys.stderr)
-            try:
-                result = subprocess.check_output(
-                    ['nslookup', host, '8.8.8.8'],
-                    stderr=subprocess.DEVNULL,
-                    timeout=5
-                ).decode()
-                match = re.search(r'Address:\s+(\d+\.\d+\.\d+\.\d+)', result)
-                if match:
-                    ip = match.group(1)
-                    print(f"Resolved {host} to {ip} via nslookup", file=sys.stderr)
-                    return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', (ip, port))]
-            except Exception as fallback_error:
-                print(f"Fallback DNS resolution failed: {fallback_error}", file=sys.stderr)
-            raise
-
-    sock_module.getaddrinfo = patched_getaddrinfo
-except Exception as patch_error:
-    print(f"Could not patch DNS: {patch_error}", file=sys.stderr)
 
 # 修正: 登録済みカード 2 つのみに限定（2026-09-22）
 CARD_KEYWORDS: list[str] = [
