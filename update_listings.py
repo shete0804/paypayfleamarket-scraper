@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""PayPay Flea Market - Google 検索から商品ページへのリンク取得"""
+"""PayPay Flea Market scraper (requests + BeautifulSoup - simple HTML structure)"""
 
 import json
 import re
 import sys
-import asyncio
-from urllib.parse import quote, urlparse
+from urllib.parse import quote
 
-from playwright.async_api import async_playwright
+import requests
 from bs4 import BeautifulSoup
 
 CARD_KEYWORDS = [
@@ -38,144 +37,84 @@ EXCLUDE_KEYWORDS = [
 ]
 
 TOP_N = 3
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+}
 
-async def get_paypal_links_from_google(page, keyword: str) -> list:
-    """Google 検索から PayPay フリマへのリンクを取得"""
+def scrape_search_results(keyword: str) -> list:
+    """検索ページから出品情報を抽出"""
     try:
-        search_url = f"https://www.google.com/search?q=site:paypayfleamarket.yahoo.co.jp {quote(keyword)}"
-        print(f"Searching Google for {keyword}...", file=sys.stderr)
+        search_url = f"https://www.paypayfleamarket.yahoo.co.jp/search?query={quote(keyword)}"
+        print(f"Scraping {keyword}...", file=sys.stderr)
 
-        await page.goto(search_url, wait_until="domcontentloaded", timeout=15000)
-        await page.wait_for_timeout(1000)
+        response = requests.get(search_url, headers=HEADERS, timeout=10)
+        response.encoding = 'utf-8'
 
-        html = await page.content()
-        soup = BeautifulSoup(html, "html.parser")
-
-        links = []
-        for link in soup.find_all("a", href=True):
-            href = link.get("href", "")
-
-            # PayPay フリマのリンクか確認
-            if "paypayfleamarket.yahoo.co.jp" in href and "/item/" in href:
-                # Google の URL リダイレクトを除去
-                if href.startswith("/url?q="):
-                    href = href.split("/url?q=")[1].split("&")[0]
-
-                links.append(href)
-
-        print(f"Found {len(links)} PayPay links", file=sys.stderr)
-        return links[:10]  # 最初の 10 件を取得
-
-    except Exception as e:
-        print(f"Google search error: {e}", file=sys.stderr)
-        return []
-
-async def scrape_item_page(page, item_url: str) -> dict:
-    """商品ページから価格と情報を抽出"""
-    try:
-        await page.goto(item_url, wait_until="domcontentloaded", timeout=15000)
-        await page.wait_for_timeout(1000)
-
-        html = await page.content()
-        soup = BeautifulSoup(html, "html.parser")
-
-        # タイトルを抽出
-        title_elem = soup.find("h1")
-        title = title_elem.get_text(strip=True) if title_elem else "Unknown"
-
-        # 価格を抽出（複数のパターンを試す）
-        price = None
-        for pattern in [r"¥([\d,]+)", r"([0-9,]+)円"]:
-            match = re.search(pattern, html)
-            if match:
-                price = int(match.group(1).replace(",", ""))
-                break
-
-        if not price:
-            return None
-
-        # EXCLUDE_KEYWORDS で除外
-        if any(kw in title for kw in EXCLUDE_KEYWORDS):
-            return None
-
-        return {
-            "title": title[:50],
-            "price": price,
-            "url": item_url,
-        }
-
-    except Exception as e:
-        print(f"Item page error: {e}", file=sys.stderr)
-        return None
-
-async def scrape_card(page, keyword: str) -> list:
-    """カードの価格情報を取得"""
-    try:
-        # Google 検索から PayPay フリマのリンクを取得
-        links = await get_paypal_links_from_google(page, keyword)
-
-        if not links:
-            print(f"No PayPay links found for {keyword}", file=sys.stderr)
+        if response.status_code != 200:
+            print(f"  Status {response.status_code}", file=sys.stderr)
             return []
 
+        soup = BeautifulSoup(response.text, "html.parser")
         results = []
-        for url in links:
+
+        # 価格情報を含むパターンを探す
+        for item_elem in soup.find_all(["div", "li"], limit=10):
+            text = item_elem.get_text(strip=True)
+
+            # 価格パターンを抽出
+            price_match = re.search(r'¥([\d,]+)', text)
+            if not price_match:
+                continue
+
+            price = int(price_match.group(1).replace(",", ""))
+
+            # タイトル抽出
+            title_elem = item_elem.find("a")
+            if not title_elem:
+                continue
+
+            title = title_elem.get_text(strip=True)[:50]
+
+            # 除外キーワード確認
+            if any(kw in title for kw in EXCLUDE_KEYWORDS):
+                continue
+
+            url = title_elem.get("href", search_url)
+            if not url.startswith("http"):
+                url = f"https://www.paypayfleamarket.yahoo.co.jp{url}"
+
+            results.append({
+                "title": title,
+                "price": price,
+                "url": url,
+            })
+
             if len(results) >= TOP_N:
                 break
 
-            item = await scrape_item_page(page, url)
-            if item:
-                results.append(item)
-
-        print(f"✓ {keyword}: {len(results)} items", file=sys.stderr)
+        print(f"  ✓ {len(results)} items", file=sys.stderr)
         return results
 
     except Exception as e:
-        print(f"Error ({keyword}): {e}", file=sys.stderr)
+        print(f"  Error: {type(e).__name__}: {str(e)[:100]}", file=sys.stderr)
         return []
 
-FALLBACK_DATA = {
-    card: [
-        {"title": f"{card} 新品", "price": 8500 + (hash(card) % 5000), "url": f"https://www.paypayfleamarket.yahoo.co.jp/search?q={quote(card)}"},
-        {"title": f"{card} 新品未開封", "price": 9000 + (hash(card) % 5000), "url": f"https://www.paypayfleamarket.yahoo.co.jp/search?q={quote(card)}"},
-        {"title": card, "price": 9500 + (hash(card) % 5000), "url": f"https://www.paypayfleamarket.yahoo.co.jp/search?q={quote(card)}"},
-    ]
-    for card in CARD_KEYWORDS
-}
+def main():
+    """メイン処理"""
+    data = {}
+    success_count = 0
 
-async def main():
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=[
-            "--disable-blink-features=AutomationControlled",
-            "--no-sandbox",
-        ])
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        )
-        page = await context.new_page()
+    for i, keyword in enumerate(CARD_KEYWORDS, 1):
+        print(f"({i}/{len(CARD_KEYWORDS)}) {keyword}", file=sys.stderr)
+        results = scrape_search_results(keyword)
+        if results:
+            data[keyword] = results
+            success_count += 1
 
-        data = {}
-        success_count = 0
+    with open("listings.json", "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-        for i, keyword in enumerate(CARD_KEYWORDS):
-            print(f"Processing ({i+1}/{len(CARD_KEYWORDS)}): {keyword}", file=sys.stderr)
-            results = await scrape_card(page, keyword)
-            if results:
-                data[keyword] = results
-                success_count += 1
-            await page.wait_for_timeout(2000)
-
-        await browser.close()
-
-        if not data:
-            print(f"No data scraped, using fallback data", file=sys.stderr)
-            data = FALLBACK_DATA
-            success_count = len(CARD_KEYWORDS)
-
-        with open("listings.json", "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-
-        print(f"OK: {success_count}/{len(CARD_KEYWORDS)} scraped", file=sys.stderr)
+    print(f"OK: {success_count}/{len(CARD_KEYWORDS)} scraped", file=sys.stderr)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
