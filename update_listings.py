@@ -76,16 +76,21 @@ def scrape_search_results(keyword: str, header_index: int = 0) -> list:
     """検索ページから出品情報を抽出（リトライ＆セッション管理）"""
     try:
         search_url = f"https://www.paypayfleamarket.yahoo.co.jp/search?query={quote(keyword)}"
-        print(f"Scraping {keyword}...", file=sys.stderr)
+        print(f"[DEBUG] URL: {search_url}", file=sys.stderr)
 
         session = get_session(header_index)
+        print(f"[DEBUG] Session created with header_index={header_index}", file=sys.stderr)
+
+        print(f"[DEBUG] Making request...", file=sys.stderr)
         response = session.get(search_url, timeout=15)
         response.encoding = 'utf-8'
 
+        print(f"[DEBUG] Response status: {response.status_code}", file=sys.stderr)
         if response.status_code != 200:
-            print(f"  Status {response.status_code}", file=sys.stderr)
+            print(f"[FAIL] Status {response.status_code}", file=sys.stderr)
             return []
 
+        print(f"[DEBUG] Parsing HTML (length: {len(response.text)})", file=sys.stderr)
         soup = BeautifulSoup(response.text, "html.parser")
         results = []
 
@@ -127,11 +132,13 @@ def scrape_search_results(keyword: str, header_index: int = 0) -> list:
             if len(results) >= TOP_N:
                 break
 
-        print(f"  ✓ {len(results)} items", file=sys.stderr)
+        print(f"[SUCCESS] {len(results)} items found", file=sys.stderr)
         return results
 
     except Exception as e:
-        print(f"  Error: {type(e).__name__}: {str(e)[:100]}", file=sys.stderr)
+        import traceback
+        print(f"[ERROR] {type(e).__name__}: {str(e)}", file=sys.stderr)
+        print(f"[TRACEBACK]\n{traceback.format_exc()}", file=sys.stderr)
         return []
 
 def main():
