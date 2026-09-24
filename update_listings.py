@@ -4,10 +4,13 @@
 import json
 import re
 import sys
+import time
 from urllib.parse import quote
 
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 CARD_KEYWORDS = [
     "メガルカリオex MUR メガブレイブ",
@@ -37,17 +40,46 @@ EXCLUDE_KEYWORDS = [
 ]
 
 TOP_N = 3
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-}
 
-def scrape_search_results(keyword: str) -> list:
-    """検索ページから出品情報を抽出"""
+# リトライ戦略
+RETRIES = Retry(
+    total=3,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+)
+ADAPTER = HTTPAdapter(max_retries=RETRIES)
+
+# ヘッダー（複数パターン）
+HEADERS_LIST = [
+    {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ja-JP,ja;q=0.9",
+        "Referer": "https://www.yahoo.co.jp/",
+    },
+    {
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ja-JP,ja;q=0.9",
+    },
+]
+
+def get_session(header_index=0):
+    """リトライ機能付きセッションを作成"""
+    session = requests.Session()
+    session.mount("https://", ADAPTER)
+    session.mount("http://", ADAPTER)
+    session.headers.update(HEADERS_LIST[header_index % len(HEADERS_LIST)])
+    return session
+
+def scrape_search_results(keyword: str, header_index: int = 0) -> list:
+    """検索ページから出品情報を抽出（リトライ＆セッション管理）"""
     try:
         search_url = f"https://www.paypayfleamarket.yahoo.co.jp/search?query={quote(keyword)}"
         print(f"Scraping {keyword}...", file=sys.stderr)
 
-        response = requests.get(search_url, headers=HEADERS, timeout=10)
+        session = get_session(header_index)
+        response = session.get(search_url, timeout=15)
         response.encoding = 'utf-8'
 
         if response.status_code != 200:
@@ -58,7 +90,7 @@ def scrape_search_results(keyword: str) -> list:
         results = []
 
         # 価格情報を含むパターンを探す
-        for item_elem in soup.find_all(["div", "li"], limit=10):
+        for item_elem in soup.find_all(["div", "li", "a"], limit=20):
             text = item_elem.get_text(strip=True)
 
             # 価格パターンを抽出
@@ -69,17 +101,20 @@ def scrape_search_results(keyword: str) -> list:
             price = int(price_match.group(1).replace(",", ""))
 
             # タイトル抽出
-            title_elem = item_elem.find("a")
-            if not title_elem:
-                continue
-
-            title = title_elem.get_text(strip=True)[:50]
+            if item_elem.name == "a":
+                title = item_elem.get_text(strip=True)[:50]
+                url = item_elem.get("href", search_url)
+            else:
+                title_elem = item_elem.find("a")
+                if not title_elem:
+                    continue
+                title = title_elem.get_text(strip=True)[:50]
+                url = title_elem.get("href", search_url)
 
             # 除外キーワード確認
             if any(kw in title for kw in EXCLUDE_KEYWORDS):
                 continue
 
-            url = title_elem.get("href", search_url)
             if not url.startswith("http"):
                 url = f"https://www.paypayfleamarket.yahoo.co.jp{url}"
 
