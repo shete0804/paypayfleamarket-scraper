@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""PayPay Flea Market scraper (Playwright - JavaScript対応)"""
+"""PayPay Flea Market scraper (undetected-chromedriver - bot検出回避)"""
 
-import asyncio
 import json
 import re
 import sys
+import time
 from urllib.parse import quote
 
-from playwright.async_api import async_playwright
+import undetected_chromedriver as uc
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 CARD_KEYWORDS = [
     "メガルカリオex MUR メガブレイブ",
@@ -44,99 +47,138 @@ def log_print(msg):
     print(msg, file=sys.stderr)
 
 
-async def scrape_keyword(browser, keyword: str) -> list:
+def scrape_keyword(driver, keyword: str) -> list:
     """キーワード検索のスクレイピング"""
     try:
-        page = await browser.new_page()
-        page.set_default_timeout(30000)
-
         search_url = f"https://www.paypayfleamarket.yahoo.co.jp/search?query={quote(keyword)}"
         log_print(f"[LOAD] {search_url}")
-        await page.goto(search_url, wait_until="networkidle")
-        log_print(f"[WAIT] JavaScript レンダリング待機中...")
-        await page.wait_for_timeout(3000)
+        driver.get(search_url)
 
-        # __NEXT_DATA__ を取得
-        script_content = await page.evaluate(
-            """() => {
-                const el = document.getElementById('__NEXT_DATA__');
-                return el ? el.textContent : null;
-            }"""
-        )
+        # ページ読み込み待機
+        log_print(f"[WAIT] ページ読み込み中...")
+        time.sleep(3)
 
-        if not script_content:
-            log_print(f"[FAIL] __NEXT_DATA__ が見つかりません")
-            await page.close()
-            return []
-
-        log_print(f"[PARSE] JSON データを解析中...")
-        data = json.loads(script_content)
-
-        # 検索結果を抽出
+        # 出品情報の取得
         results = []
+
         try:
-            # PayPay Flea Market の JSON 構造から出品情報を抽出
-            items = data.get("props", {}).get("pageProps", {}).get("results", [])
-
-            for item in items:
-                title = item.get("title", "")
-                price = item.get("price", None)
-                url = item.get("url", "") or f"https://www.paypayfleamarket.yahoo.co.jp/item/{item.get('id', '')}"
-
-                # フィルタリング
-                if not title or price is None:
+            # 商品リスト要素を探す（複数のセレクタを試す）
+            items = None
+            for selector in [
+                "div[data-testid='product-card']",
+                "div[class*='ProductCard']",
+                "li[class*='product']",
+                "article",
+            ]:
+                try:
+                    items = driver.find_elements(By.CSS_SELECTOR, selector)
+                    if items and len(items) > 0:
+                        log_print(f"[FOUND] セレクタ '{selector}' で {len(items)} 件見つかりました")
+                        break
+                except:
                     continue
-                if any(kw in title for kw in EXCLUDE_KEYWORDS):
+
+            if not items:
+                log_print(f"[FAIL] 商品要素が見つかりません")
+                return []
+
+            # 価格情報を抽出
+            for item in items[:20]:
+                try:
+                    # タイトル取得
+                    title_elem = None
+                    for title_selector in ["h2", "h3", "[class*='title']", "a"]:
+                        try:
+                            title_elem = item.find_element(By.CSS_SELECTOR, title_selector)
+                            if title_elem and title_elem.text:
+                                break
+                        except:
+                            continue
+
+                    if not title_elem or not title_elem.text:
+                        continue
+                    title = title_elem.text[:50]
+
+                    # 価格取得
+                    price = None
+                    price_text = item.text
+                    price_match = re.search(r'¥([\d,]+)', price_text)
+                    if price_match:
+                        price = int(price_match.group(1).replace(",", ""))
+
+                    if not price:
+                        continue
+
+                    # URL取得
+                    url = ""
+                    try:
+                        link = item.find_element(By.TAG_NAME, "a")
+                        url = link.get_attribute("href")
+                    except:
+                        pass
+
+                    if not url.startswith("http"):
+                        url = f"https://www.paypayfleamarket.yahoo.co.jp{url}"
+
+                    # フィルタリング
+                    if any(kw in title for kw in EXCLUDE_KEYWORDS):
+                        continue
+
+                    results.append({
+                        "title": title,
+                        "price": price,
+                        "url": url,
+                    })
+
+                    if len(results) >= TOP_N:
+                        break
+
+                except Exception as e:
                     continue
 
-                results.append({
-                    "title": title[:50],
-                    "price": int(price),
-                    "url": url if url.startswith("http") else f"https://www.paypayfleamarket.yahoo.co.jp{url}",
-                })
-
-                if len(results) >= TOP_N:
-                    break
-
-        except (KeyError, TypeError) as e:
+        except Exception as e:
             log_print(f"[PARSE_ERROR] {type(e).__name__}: {str(e)[:100]}")
 
         log_print(f"[SUCCESS] {len(results)} 件取得")
-        await page.close()
         return results
 
     except Exception as e:
         log_print(f"[ERROR] {type(e).__name__}: {str(e)[:100]}")
-        try:
-            await page.close()
-        except:
-            pass
         return []
 
 
-async def main():
+def main():
     """メイン処理"""
     log_print("[START] PayPay Flea Market スクレイピング開始")
     log_print(f"[INFO] {len(CARD_KEYWORDS)} 個のキーワードを処理")
 
+    driver = None
     data = {}
     success_count = 0
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=[
-            "--disable-blink-features=AutomationControlled",
-            "--disable-dev-shm-usage",  # GitHub Actions 対応
-        ])
+    try:
+        # undetected-chromedriver でブラウザ起動
+        log_print("[INIT] undetected-chromedriver を起動...")
+        driver = uc.Chrome(headless=True, use_subprocess=False)
 
         for i, keyword in enumerate(CARD_KEYWORDS, 1):
             log_print(f"\n[{i}/{len(CARD_KEYWORDS)}] {keyword}")
-            results = await scrape_keyword(browser, keyword)
+            results = scrape_keyword(driver, keyword)
 
             if results:
                 data[keyword] = results
                 success_count += 1
 
-        await browser.close()
+    except Exception as e:
+        log_print(f"[CRITICAL] {type(e).__name__}: {str(e)[:100]}")
+
+    finally:
+        if driver:
+            try:
+                driver.quit()
+                log_print("[CLEANUP] ブラウザを閉じました")
+            except:
+                pass
 
     # 結果を保存
     log_print(f"\n[END] 合計 {success_count}/{len(CARD_KEYWORDS)} 件成功")
@@ -150,4 +192,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
