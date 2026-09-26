@@ -22,7 +22,11 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install requests beautifulsoup4 playwright undetected-chromedriver selenium
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install requests beautifulsoup4 selenium
+          pip install undetected-chromedriver
+          pip install playwright
 
       - name: Install Playwright browsers
         run: playwright install chromium
