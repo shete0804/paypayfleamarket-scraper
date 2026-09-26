@@ -159,7 +159,11 @@ def main():
     try:
         # undetected-chromedriver でブラウザ起動
         log_print("[INIT] undetected-chromedriver を起動...")
-        driver = uc.Chrome(headless=True, use_subprocess=False)
+        driver = uc.Chrome(
+            headless=True,
+            use_subprocess=False,
+            browser_executable_path="/usr/bin/chromium-browser"
+        )
 
         for i, keyword in enumerate(CARD_KEYWORDS, 1):
             log_print(f"\n[{i}/{len(CARD_KEYWORDS)}] {keyword}")

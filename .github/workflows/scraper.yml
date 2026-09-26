@@ -31,6 +31,11 @@ jobs:
       - name: Install Playwright browsers
         run: playwright install chromium
 
+      - name: Install Chromium for undetected-chromedriver
+        run: |
+          apt-get update
+          apt-get install -y chromium-browser xvfb
+
       - name: "Debug: Fetch raw HTML"
         run: python debug_html.py
 
