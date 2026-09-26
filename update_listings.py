@@ -143,23 +143,38 @@ def scrape_search_results(keyword: str, header_index: int = 0) -> list:
 
 def main():
     """メイン処理"""
+    # ログファイルに出力も同時に行う
+    log_file = open("update_listings_debug.log", "w", encoding="utf-8")
+
+    def log_print(msg):
+        print(msg, file=sys.stderr)
+        print(msg, file=log_file)
+        log_file.flush()
+
     data = {}
     success_count = 0
 
+    log_print(f"[START] Scraping {len(CARD_KEYWORDS)} cards")
     for i, keyword in enumerate(CARD_KEYWORDS, 1):
-        print(f"({i}/{len(CARD_KEYWORDS)}) {keyword}", file=sys.stderr)
+        log_print(f"({i}/{len(CARD_KEYWORDS)}) {keyword}")
         results = scrape_search_results(keyword)
         if results:
             data[keyword] = results
             success_count += 1
+            log_print(f"  ✓ Success: {len(results)} items")
+        else:
+            log_print(f"  ✗ Failed: 0 items")
 
     # スクレイピング結果がある場合のみ更新
+    log_print(f"[END] Total success: {success_count}/{len(CARD_KEYWORDS)}")
     if success_count > 0:
         with open("listings.json", "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"OK: {success_count}/{len(CARD_KEYWORDS)} scraped", file=sys.stderr)
+        log_print(f"✅ listings.json updated")
     else:
-        print(f"WARNING: No data scraped, keeping existing listings.json", file=sys.stderr)
+        log_print(f"⚠️ No data scraped, keeping existing listings.json")
+
+    log_file.close()
 
 if __name__ == "__main__":
     main()

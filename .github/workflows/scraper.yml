@@ -48,6 +48,6 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add listings.json
-          git commit -m "auto: update listings" || true
+          git add listings.json update_listings_debug.log 2>/dev/null || true
+          git commit -m "auto: update listings & debug log" || true
           git push https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git || true
