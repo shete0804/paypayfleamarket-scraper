@@ -1,6 +1,10 @@
 check:
     interval_sec: 21600  # 6時間ごと
 
+slack:
+    bot_token: "xoxb-dummy"  # Discord利用のため不使用
+    from: "price-watch"
+
 data:
     selenium: ./data
     dump: ./data/debug
