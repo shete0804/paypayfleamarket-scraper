@@ -1,0 +1,11 @@
+services:
+    price-watch:
+        image: ghcr.io/kimata/price-watch:latest@sha256:1d331e50c81cc6c3993279bc08a004d92d7f96e9e87a4d0b39e4db524e51bb61
+        tty: false
+        stdin_open: true
+        volumes:
+            - ./config.yaml:/opt/price-watch/config.yaml:ro
+            - ./target.yaml:/opt/price-watch/target.yaml:ro
+            - ./data:/opt/price-watch/data
+        ports:
+            - "5000:5000"

@@ -1,0 +1,95 @@
+import { memo } from "react";
+import {
+    CheckCircleIcon,
+    XCircleIcon,
+    ArrowTopRightOnSquareIcon,
+} from "@heroicons/react/24/outline";
+import clsx from "clsx";
+import type { StoreEntry } from "../types";
+import { formatPrice, formatPriceDiff } from "../utils/formatPrice";
+import StoreIcon from "./StoreIcon";
+
+interface StoreRowProps {
+    store: StoreEntry;
+    isBest: boolean;
+    bestPrice: number | null;
+}
+
+function StoreRow({ store, isBest, bestPrice }: StoreRowProps) {
+    const isInStock = store.stock > 0;
+    const hasPrice = store.effective_price !== null;
+    const priceDiff = hasPrice && bestPrice !== null ? store.effective_price! - bestPrice : 0;
+
+    // メルカリの場合は product_url を優先、なければ url を使用
+    const linkUrl = store.product_url || store.url;
+    const hasValidUrl = Boolean(linkUrl);
+
+    return (
+        <div
+            className={clsx(
+                "flex items-center justify-between py-3 px-4 rounded-md",
+                isBest && hasPrice ? "bg-blue-50 border border-blue-200" : "bg-gray-50"
+            )}
+        >
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+                {hasValidUrl ? (
+                    <a
+                        href={linkUrl!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-base font-medium text-gray-700 hover:text-blue-600 truncate flex items-center gap-1.5"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <StoreIcon store={store.store} size={18} />
+                        <span className="truncate">{store.store}</span>
+                        <ArrowTopRightOnSquareIcon className="h-4 w-4 flex-shrink-0" />
+                    </a>
+                ) : (
+                    <span className="text-base font-medium text-gray-400 truncate flex items-center gap-1.5">
+                        <StoreIcon store={store.store} size={18} />
+                        <span className="truncate">{store.store}</span>
+                    </span>
+                )}
+                {isBest && hasPrice && (
+                    <span className="text-sm px-2 py-0.5 bg-blue-100 text-blue-700 rounded whitespace-nowrap">
+                        最安
+                    </span>
+                )}
+            </div>
+            <div className="flex items-center gap-2">
+                <div className="text-right min-w-[6.5rem]">
+                    {hasPrice ? (
+                        <>
+                            <div className="text-lg font-bold text-gray-900 whitespace-nowrap tabular-nums">
+                                {formatPrice(store.effective_price!, store.price_unit)}
+                            </div>
+                            {(priceDiff > 0 || store.point_rate > 0) && (
+                                <div className="text-xs text-gray-400 whitespace-nowrap">
+                                    {priceDiff > 0 && <span>{formatPriceDiff(priceDiff, store.price_unit)}</span>}
+                                    {priceDiff > 0 && store.point_rate > 0 && <span> / </span>}
+                                    {store.point_rate > 0 && <span>{store.point_rate}%還元考慮</span>}
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <div className="text-lg text-gray-400 whitespace-nowrap">---</div>
+                    )}
+                </div>
+                <span
+                    className={clsx(
+                        "flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full flex-shrink-0",
+                        isInStock ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                    )}
+                >
+                    {isInStock ? (
+                        <CheckCircleIcon className="h-3 w-3" />
+                    ) : (
+                        <XCircleIcon className="h-3 w-3" />
+                    )}
+                </span>
+            </div>
+        </div>
+    );
+}
+
+export default memo(StoreRow);
