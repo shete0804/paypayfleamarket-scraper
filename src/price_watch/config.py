@@ -398,7 +398,7 @@ class AppConfig:
     slack: my_lib.notify.slack.SlackConfigTypes
     store: StoreConfig
     data: DataConfig
-    webapp: my_lib.webapp.config.WebappConfig
+    webapp: my_lib.webapp.config.WebappConfig | None = None
     target: TargetConfig
     liveness: LivenessConfig
     edit: EditConfig
@@ -425,7 +425,9 @@ class AppConfig:
         data_config = DataConfig.parse(data.get("data", {}))
 
         # Webapp 設定
-        webapp = my_lib.webapp.config.WebappConfig.parse(data.get("webapp", {}))
+        webapp = None
+        if "webapp" in data:
+            webapp = my_lib.webapp.config.WebappConfig.parse(data["webapp"])
 
         # Target 設定
         target = TargetConfig.parse(data.get("target", {}))
