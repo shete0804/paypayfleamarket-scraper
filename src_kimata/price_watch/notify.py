@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Slack 通知処理."""
+"""Discord/Slack 通知処理."""
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import TYPE_CHECKING
 from urllib.parse import urljoin
+
+import requests
 
 import my_lib.notify.slack
 
@@ -16,6 +19,24 @@ if TYPE_CHECKING:
     import PIL.Image
 
     from price_watch.models import CheckedItem, TargetDiff
+
+
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
+
+
+def _send_discord(embed: dict) -> bool:
+    """Discord Webhook で通知を送信."""
+    if not DISCORD_WEBHOOK_URL:
+        logging.debug("DISCORD_WEBHOOK_URL not set, skipping Discord notification")
+        return False
+
+    try:
+        response = requests.post(DISCORD_WEBHOOK_URL, json={"embeds": [embed]}, timeout=10)
+        response.raise_for_status()
+        return True
+    except Exception as e:
+        logging.warning(f"Failed to send Discord notification: {e}")
+        return False
 
 
 MESSAGE_TMPL = """\
@@ -89,30 +110,44 @@ def info(
     is_record: bool = False,
 ) -> str | None:
     """価格変更の情報を通知."""
-    if isinstance(slack_config, my_lib.notify.slack.SlackEmptyConfig):
-        return None
+    if not isinstance(slack_config, my_lib.notify.slack.SlackEmptyConfig):
+        message_text = ":tada: {old_price:,} ⇒ *{price:,}{price_unit}* {record}\n{stock}\n<{url}|詳細>".format(
+            old_price=item.old_price or 0,
+            price=item.price or 0,
+            price_unit=item.price_unit,
+            url=item.url or "",
+            record=":fire:" if is_record else "",
+            stock="out of stock" if item.stock_as_int() == 0 else "in stock",
+        )
 
-    message_text = ":tada: {old_price:,} ⇒ *{price:,}{price_unit}* {record}\n{stock}\n<{url}|詳細>".format(
-        old_price=item.old_price or 0,
-        price=item.price or 0,
-        price_unit=item.price_unit,
-        url=item.url or "",
-        record=":fire:" if is_record else "",
-        stock="out of stock" if item.stock_as_int() == 0 else "in stock",
-    )
+        message_json = MESSAGE_TMPL.format(
+            message=json.dumps(message_text),
+            name=json.dumps(item.name),
+            thumb_url=json.dumps(item.thumb_url or ""),
+        )
 
-    message_json = MESSAGE_TMPL.format(
-        message=json.dumps(message_text),
-        name=json.dumps(item.name),
-        thumb_url=json.dumps(item.thumb_url or ""),
-    )
+        formatted = my_lib.notify.slack.FormattedMessage(
+            text=item.name,
+            json=json.loads(message_json),
+        )
 
-    formatted = my_lib.notify.slack.FormattedMessage(
-        text=item.name,
-        json=json.loads(message_json),
-    )
+        my_lib.notify.slack.send(slack_config, slack_config.info.channel.name, formatted)  # type: ignore[union-attr]
 
-    return my_lib.notify.slack.send(slack_config, slack_config.info.channel.name, formatted)  # type: ignore[union-attr, return-value]
+    discord_embed = {
+        "title": f"{'🔥' if is_record else '💰'} {item.name}",
+        "description": f"**{item.old_price or 0:,} → ¥{item.price or 0:,}** {item.price_unit}",
+        "fields": [
+            {"name": "ストア", "value": item.store or "不明", "inline": True},
+            {"name": "在庫", "value": "在庫あり" if item.stock_as_int() != 0 else "品切れ", "inline": True},
+            {"name": "URL", "value": f"[詳細を見る]({item.url or ''})", "inline": False},
+        ],
+        "color": 0xFF5733 if is_record else 0x3498DB,
+    }
+    if item.thumb_url:
+        discord_embed["thumbnail"] = {"url": item.thumb_url}
+
+    _send_discord(discord_embed)
+    return None
 
 
 def error(
@@ -121,26 +156,36 @@ def error(
     error_msg: str,
 ) -> str | None:
     """エラーを通知."""
-    if isinstance(slack_config, my_lib.notify.slack.SlackEmptyConfig):
-        return None
+    if not isinstance(slack_config, my_lib.notify.slack.SlackEmptyConfig):
+        message_text = "<{url}|URL>\n{error_msg}".format(url=item.url or "", error_msg=error_msg)
 
-    message_text = "<{url}|URL>\n{error_msg}".format(url=item.url or "", error_msg=error_msg)
+        message_json = ERROR_TMPL.format(
+            message=json.dumps(message_text),
+            name=json.dumps(item.name),
+        )
 
-    message_json = ERROR_TMPL.format(
-        message=json.dumps(message_text),
-        name=json.dumps(item.name),
-    )
+        formatted = my_lib.notify.slack.FormattedMessage(
+            text=item.name,
+            json=json.loads(message_json),
+        )
 
-    formatted = my_lib.notify.slack.FormattedMessage(
-        text=item.name,
-        json=json.loads(message_json),
-    )
+        try:
+            my_lib.notify.slack.send(slack_config, slack_config.error.channel.name, formatted)  # type: ignore[union-attr]
+        except Exception:
+            logging.exception("Failed to send Slack error notification")
 
-    try:
-        return my_lib.notify.slack.send(slack_config, slack_config.error.channel.name, formatted)  # type: ignore[union-attr, return-value]
-    except Exception:
-        logging.exception("Failed to send error notification")
-        return None
+    discord_embed = {
+        "title": f"⚠️ エラー: {item.name}",
+        "description": error_msg,
+        "fields": [
+            {"name": "ストア", "value": item.store or "不明", "inline": True},
+            {"name": "URL", "value": f"[リンク]({item.url or ''})", "inline": False},
+        ],
+        "color": 0xFF0000,
+    }
+
+    _send_discord(discord_embed)
+    return None
 
 
 def error_with_page(
@@ -248,44 +293,67 @@ def event(
     Returns:
         スレッドのタイムスタンプ、または通知失敗時は None
     """
-    if isinstance(slack_config, my_lib.notify.slack.SlackEmptyConfig):
-        return None
+    if not isinstance(slack_config, my_lib.notify.slack.SlackEmptyConfig):
+        # イベントタイプに応じたアイコンを選択
+        icon = _get_event_icon(event_result.event_type)
+        title = f"{icon}{price_watch.event.format_event_title(event_result.event_type.value)}: {item.name}"
 
-    # イベントタイプに応じたアイコンを選択
-    icon = _get_event_icon(event_result.event_type)
-    title = f"{icon}{price_watch.event.format_event_title(event_result.event_type.value)}: {item.name}"
+        # メッセージを構築
+        message_text = _build_event_message(event_result, item)
 
-    # メッセージを構築
-    message_text = _build_event_message(event_result, item)
+        # テンプレートを選択
+        thumb_url = _resolve_thumb_url(item.thumb_url, external_url)
+        if thumb_url:
+            message_json = EVENT_TMPL.format(
+                title=json.dumps(title),
+                message=json.dumps(message_text),
+                thumb_url=json.dumps(thumb_url),
+                name=json.dumps(item.name),
+            )
+        else:
+            message_json = EVENT_TMPL_NO_THUMB.format(
+                title=json.dumps(title),
+                message=json.dumps(message_text),
+            )
 
-    # テンプレートを選択
-    thumb_url = _resolve_thumb_url(item.thumb_url, external_url)
-    if thumb_url:
-        message_json = EVENT_TMPL.format(
-            title=json.dumps(title),
-            message=json.dumps(message_text),
-            thumb_url=json.dumps(thumb_url),
-            name=json.dumps(item.name),
+        formatted = my_lib.notify.slack.FormattedMessage(
+            text=title,
+            json=json.loads(message_json),
         )
-    else:
-        message_json = EVENT_TMPL_NO_THUMB.format(
-            title=json.dumps(title),
-            message=json.dumps(message_text),
-        )
 
-    formatted = my_lib.notify.slack.FormattedMessage(
-        text=title,
-        json=json.loads(message_json),
-    )
+        # DATA_RETRIEVAL_FAILURE は error チャンネルに通知、それ以外は info チャンネルに通知
+        try:
+            if event_result.event_type == price_watch.event.EventType.DATA_RETRIEVAL_FAILURE:
+                my_lib.notify.slack.send(slack_config, slack_config.error.channel.name, formatted)  # type: ignore[union-attr]
+            else:
+                my_lib.notify.slack.send(slack_config, slack_config.info.channel.name, formatted)  # type: ignore[union-attr]
+        except Exception:
+            logging.exception("Failed to send Slack event notification")
 
-    # DATA_RETRIEVAL_FAILURE は error チャンネルに通知、それ以外は info チャンネルに通知
-    try:
-        if event_result.event_type == price_watch.event.EventType.DATA_RETRIEVAL_FAILURE:
-            return my_lib.notify.slack.send(slack_config, slack_config.error.channel.name, formatted)  # type: ignore[union-attr, return-value]
-        return my_lib.notify.slack.send(slack_config, slack_config.info.channel.name, formatted)  # type: ignore[union-attr, return-value]
-    except Exception:
-        logging.exception("Failed to send event notification")
-        return None
+    # Discord 通知
+    icon_map = {
+        price_watch.event.EventType.BACK_IN_STOCK: "📦",
+        price_watch.event.EventType.CRAWL_FAILURE: "⚠️",
+        price_watch.event.EventType.DATA_RETRIEVAL_FAILURE: "❌",
+        price_watch.event.EventType.LOWEST_PRICE: "🔥",
+        price_watch.event.EventType.PRICE_DROP: "📉",
+    }
+    icon = icon_map.get(event_result.event_type, "📌")
+
+    discord_embed = {
+        "title": f"{icon} {price_watch.event.format_event_title(event_result.event_type.value)}: {item.name}",
+        "description": _build_event_message(event_result, item),
+        "fields": [
+            {"name": "ストア", "value": item.store or "不明", "inline": True},
+            {"name": "現在価格", "value": f"¥{event_result.price:,}" if event_result.price else "不明", "inline": True},
+        ],
+        "color": 0xFF0000 if event_result.event_type == price_watch.event.EventType.DATA_RETRIEVAL_FAILURE else 0xFF5733,
+    }
+    if item.thumb_url:
+        discord_embed["thumbnail"] = {"url": item.thumb_url}
+
+    _send_discord(discord_embed)
+    return None
 
 
 def _get_event_icon(event_type: price_watch.event.EventType) -> str:
