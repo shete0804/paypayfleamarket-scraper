@@ -12,6 +12,8 @@ data:
 target:
     define: target.yaml
 
+webapp: {}
+
 liveness:
     file:
         crawler: /tmp/healthz
