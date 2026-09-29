@@ -398,12 +398,12 @@ class AppConfig:
     slack: my_lib.notify.slack.SlackConfigTypes
     store: StoreConfig
     data: DataConfig
-    webapp: my_lib.webapp.config.WebappConfig | None = None
     target: TargetConfig
     liveness: LivenessConfig
     edit: EditConfig
     font: FontConfig | None = None
     webpush: WebPushConfig | None = None
+    webapp: my_lib.webapp.config.WebappConfig | None = None
 
     @classmethod
     def parse(cls, data: dict[str, Any]) -> AppConfig:
@@ -453,12 +453,12 @@ class AppConfig:
             slack=slack,
             store=store,
             data=data_config,
-            webapp=webapp,
             target=target,
             liveness=liveness,
             edit=edit,
             font=font,
             webpush=webpush,
+            webapp=webapp,
         )
 
 
