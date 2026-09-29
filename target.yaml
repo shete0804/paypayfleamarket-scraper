@@ -1,95 +1,113 @@
-# PayPay フリマ 監視対象 (18カード)
+category_list:
+    - フリマ
+
+store_list:
+    - name: paypay.co.jp
+      check_method: my_lib.store.paypay.search
+      color: "#0099e8" # PayPay ブルー
 
 item_list:
     - name: メガルカリオex MUR メガブレイブ
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: メガルカリオex
             price:
                 - 5500
                 - 72000
 
     - name: リーリエの決心 SAR メガブレイブ
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: リーリエの決心
 
     - name: メガサーナイトex MUR メガシンフォニア
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: メガサーナイトex MUR
 
     - name: メガサーナイトex SAR メガシンフォニア
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: メガサーナイトex SAR
 
     - name: メガリザードンXex MUR インフェルノX
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: メガリザードンXex MUR
 
     - name: メガリザードンXex SAR インフェルノX
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: メガリザードンXex SAR
 
     - name: メガカイリューex MUR MEGAドリームex
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: メガカイリューex MUR
 
     - name: ピカチュウex SAR MEGAドリームex
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: ピカチュウex SAR
 
     - name: ロケット団のミュウツーex SAR MEGAドリームex
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: ロケット団のミュウツーex SAR
 
-    - name: メガゲンガーex SAR MEGAドリームex
+    - name: ミライドンex SAR ミラクルツイン
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: ミライドンex SAR
 
-    - name: メガカイリューex SAR MEGAドリームex
+    - name: ペパーミントex SAR テラスタル
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: ペパーミントex SAR
 
-    - name: メガジガルデex MUR ムニキスゼロ
+    - name: テツノデシマex SAR 電気テラスタル
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: テツノデシマex SAR
 
-    - name: ニャースex SAR ムニキスゼロ
+    - name: イトウの魂ex SAR アルセウス
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: イトウの魂ex SAR
 
-    - name: メイのはげまし SAR ムニキスゼロ
+    - name: シャルマンダースー SAR スカーレット
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: シャルマンダースー SAR
 
-    - name: メガゲッコウガex MUR ニンジャスピナー
+    - name: シンオウの君臨 SAR ブリリアントスターズ
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: シンオウの君臨 SAR
 
-    - name: メガゲッコウガex SAR ニンジャスピナー
+    - name: ルギアex SAR シルバーテンペスト
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: ルギアex SAR
 
-    - name: メガダークライex MUR アビスアイ
+    - name: ビリリダマ SAR スカーレット
+      category: フリマ
       store:
           - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
-
-    - name: メガダークライex SAR アビスアイ
-      store:
-          - name: paypay.co.jp
-            check_method: my_lib.store.paypay.search
+            search_keyword: ビリリダマ SAR
