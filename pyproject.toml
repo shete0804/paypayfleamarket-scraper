@@ -20,6 +20,8 @@ dependencies = [
 
 [project.scripts]
 price-watch = "price_watch.cli.app:main"
+price-watch-healthz = "price_watch.cli.healthz:main"
+price-watch-webui = "price_watch.cli.webui:main"
 
 [build-system]
 requires = ["setuptools", "wheel"]
