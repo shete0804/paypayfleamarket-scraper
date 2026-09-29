@@ -12,9 +12,6 @@ data:
 target:
     define: target.yaml
 
-webapp:
-    port: 5000
-
 liveness:
     file:
         crawler: /tmp/healthz

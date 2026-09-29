@@ -424,8 +424,8 @@ class AppConfig:
         # Data 設定
         data_config = DataConfig.parse(data.get("data", {}))
 
-        # Webapp 設定（必須）
-        webapp = my_lib.webapp.config.WebappConfig.parse(data["webapp"])
+        # Webapp 設定
+        webapp = my_lib.webapp.config.WebappConfig.parse(data.get("webapp", {}))
 
         # Target 設定
         target = TargetConfig.parse(data.get("target", {}))
