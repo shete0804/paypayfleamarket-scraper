@@ -11,7 +11,7 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -21,42 +21,25 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip setuptools wheel
-          pip install requests beautifulsoup4 selenium
-          pip install undetected-chromedriver
-          pip install playwright
-
-      - name: Install Playwright browsers
-        run: playwright install chromium
-
-      - name: Install Chromium for undetected-chromedriver
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y chromium-browser xvfb
 
-      - name: "Debug: Fetch raw HTML"
-        run: python debug_html.py
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install -e .
 
-      - name: Scrape and update PayPay
-        run: python update_listings.py
-
-      - name: Scrape and update Mercari
-        run: python mercari_scraper.py
-
-      - name: "Debug: Test scrape"
-        run: python test_scrape.py 2>&1 || true
-
-      - name: Send to Discord
+      - name: Run PayPay Flea Market price watch
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: python paypayfleamarket_scraper.py
+        run: price-watch
 
       - name: Commit changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add listings.json update_listings_debug.log 2>/dev/null || true
-          git commit -m "auto: update listings & debug log" || true
+          git add data/ listings.json 2>/dev/null || true
+          git commit -m "auto: update PayPay flea market listings" || true
           git push https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git || true

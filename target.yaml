@@ -1,0 +1,95 @@
+# PayPay フリマ 監視対象 (18カード)
+
+item_list:
+    - name: メガルカリオex MUR メガブレイブ
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+            price:
+                - 5500
+                - 72000
+
+    - name: リーリエの決心 SAR メガブレイブ
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: メガサーナイトex MUR メガシンフォニア
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: メガサーナイトex SAR メガシンフォニア
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: メガリザードンXex MUR インフェルノX
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: メガリザードンXex SAR インフェルノX
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: メガカイリューex MUR MEGAドリームex
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: ピカチュウex SAR MEGAドリームex
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: ロケット団のミュウツーex SAR MEGAドリームex
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: メガゲンガーex SAR MEGAドリームex
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: メガカイリューex SAR MEGAドリームex
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: メガジガルデex MUR ムニキスゼロ
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: ニャースex SAR ムニキスゼロ
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: メイのはげまし SAR ムニキスゼロ
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: メガゲッコウガex MUR ニンジャスピナー
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: メガゲッコウガex SAR ニンジャスピナー
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: メガダークライex MUR アビスアイ
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
+
+    - name: メガダークライex SAR アビスアイ
+      store:
+          - name: paypay.co.jp
+            check_method: my_lib.store.paypay.search
